@@ -7,7 +7,7 @@ using Virabis.Movement.Core.Modifiers;
 namespace Virabis.Movement.Bridge;
 
 /// <summary>
-/// Godot ↔ Core adapter. GDScript'ten erişilebilir.
+/// Godot ↔ Core adapter. "The Pulse" entegrasyonu ile optimize edildi.
 /// </summary>
 [GlobalClass]
 public partial class MovementNode : Node
@@ -23,15 +23,11 @@ public partial class MovementNode : Node
     [Export] public MovementConfig Config { get; set; } = null!;
     private IMovementSystem _system = null!;
     private SudoMovementDecorator _sudoDecorator = null!;
+    private MovementPulse _pulse = new();
 
     // ── Vertical ──────────────────────────────────────────────────────────────
     private float _verticalVelocity;
     private float _gravity;
-
-    // ── Coyote Time & Jump Buffer ────────────────────────────────────────────
-    private float _coyoteTimer;
-    private float _jumpBufferTimer;
-    private bool  _wasOnFloor;
 
     // ── Ground Slam ───────────────────────────────────────────────────────────
     private bool _groundSlamRequested;
@@ -51,7 +47,7 @@ public partial class MovementNode : Node
     {
         var coreSystem = new MovementSystem(Config);
         _sudoDecorator = new SudoMovementDecorator(coreSystem);
-        _system = _sudoDecorator; // Varsayılan olarak decorator üzerinden çalışır
+        _system = _sudoDecorator;
         
         _gravity = ProjectSettings.GetSetting("physics/3d/default_gravity").AsSingle();
     }
@@ -62,32 +58,25 @@ public partial class MovementNode : Node
 
         float dt = (float)delta;
 
+        // "The Pulse" Güncellemesi
+        _pulse.Update(dt);
+
         bool isOnFloor = Character.IsOnFloor();
         if (isOnFloor)
         {
-            _coyoteTimer = CoyoteTime;
-            _wasOnFloor = true;
-        }
-        else if (_wasOnFloor)
-        {
-            _coyoteTimer -= dt;
-            if (_coyoteTimer <= 0f) _wasOnFloor = false;
+            _pulse.StartCoyote(CoyoteTime);
         }
 
         if (_jumpThisFrame)
         {
-            _jumpBufferTimer = JumpBuffer;
+            _pulse.StartJumpBuffer(JumpBuffer);
             _jumpThisFrame = false;
-        }
-        else if (_jumpBufferTimer > 0f)
-        {
-            _jumpBufferTimer -= dt;
         }
 
         ApplyVertical(dt);
 
-        bool canJump = isOnFloor || _coyoteTimer > 0f || _sudoDecorator.InfiniteJumps;
-        bool jumpRequested = _jumpBufferTimer > 0f && canJump;
+        bool canJump = isOnFloor || _pulse.IsCoyoteActive || _sudoDecorator.InfiniteJumps;
+        bool jumpRequested = _pulse.IsJumpBuffered && canJump;
 
         var ctx = new MovementContext
         {
@@ -107,8 +96,8 @@ public partial class MovementNode : Node
         if (result.JumpConsumed)
         {
             _verticalVelocity = JumpForce;
-            _jumpBufferTimer = 0f;
-            _coyoteTimer = 0f;
+            _pulse.ClearJumpBuffer();
+            _pulse.ClearCoyote();
         }
 
         if (result.DisableGravity)
@@ -120,7 +109,6 @@ public partial class MovementNode : Node
             result.NewVelocity.Z
         );
         
-        // NoClip durumunda collision kapatılabilir (GDScript tarafında da yönetilebilir)
         Character.MoveAndSlide();
 
         if (result.State != _lastState)
@@ -211,7 +199,8 @@ public partial class MovementNode : Node
             ["jumps_remaining"] = _system.JumpsRemaining,
             ["is_flying"]       = _flying,
             ["enabled"]         = _enabled,
-            ["modifier_count"]  = modifiers.Count,
+            ["pulse_coyote"]    = _pulse.IsCoyoteActive,
+            ["pulse_buffer"]    = _pulse.IsJumpBuffered,
             ["modifiers"]       = modifiers
         };
     }
