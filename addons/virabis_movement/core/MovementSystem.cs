@@ -29,9 +29,9 @@ public sealed class MovementSystem
 
     // ─────────────────────────────────────────────────────────────────────────
 
-    public MovementSystem(MovementConfig? config = null)
+    public MovementSystem(MovementConfig config)
     {
-        _config        = config ?? MovementConfig.Default;
+        _config        = config;
         JumpsRemaining = _config.MaxJumps;
     }
 
@@ -103,6 +103,8 @@ public sealed class MovementSystem
         foreach (var m in _modifiers) labels.Add(m.DebugLabel);
         return labels;
     }
+
+    public IReadOnlyList<IMovementModifier> GetModifiers() => _modifiers;
 
     // ─────────────────────────────────────────────────────────────────────────
     // PRIVATE — Pipeline adımları (her biri tek sorumluluk)

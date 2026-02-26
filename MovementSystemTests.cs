@@ -9,7 +9,7 @@ public class MovementSystemTests
 {
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static MovementSystem Make(MovementConfig? cfg = null) => new(cfg);
+    private static MovementSystem Make(MovementConfig? cfg = null) => new(cfg ?? new MovementConfig());
 
     private static MovementContext Ctx(
         Vector3? dir       = null,
@@ -73,7 +73,7 @@ public class MovementSystemTests
 
     [Fact] public void DoubleJump_Config_Allows_Two()
     {
-        var sys = Make(MovementConfig.DoubleJump);
+        var sys = Make(new MovementConfig { MaxJumps = 2 });
         sys.Update(Ctx(dir: Vector3.UnitX, jumpReq: true, jumpsLeft: 2, onFloor: false));
         Assert.Equal(1, sys.JumpsRemaining);
         sys.Update(Ctx(dir: Vector3.UnitX, jumpReq: true, jumpsLeft: 1, onFloor: false));
@@ -82,7 +82,7 @@ public class MovementSystemTests
 
     [Fact] public void Jump_Resets_On_Floor()
     {
-        var sys = Make(MovementConfig.DoubleJump);
+        var sys = Make(new MovementConfig { MaxJumps = 2 });
         sys.Update(Ctx(jumpReq: true, jumpsLeft: 2, onFloor: false));
         sys.Update(Ctx(jumpReq: true, jumpsLeft: 1, onFloor: false));
         Assert.Equal(0, sys.JumpsRemaining);
@@ -100,9 +100,10 @@ public class MovementSystemTests
 
     [Fact] public void Sprint_Capped_At_MaxSpeed()
     {
-        var result = Make().Update(Ctx(dir: Vector3.UnitX, sprinting: true,
+        var cfg = new MovementConfig();
+        var result = Make(cfg).Update(Ctx(dir: Vector3.UnitX, sprinting: true,
             dt: 1.0f, velocity: Vector3.UnitX * 100f));
-        Assert.True(result.NewVelocity.Length() <= MovementConfig.Default.MaxSpeedCap + 0.01f);
+        Assert.True(result.NewVelocity.Length() <= cfg.MaxSpeedCap + 0.01f);
     }
 
     [Fact] public void Velocity_Y_Always_Zero()
@@ -131,7 +132,7 @@ public class MovementSystemTests
 
     [Fact] public void MaxModifiers_Guard()
     {
-        var cfg = MovementConfig.Default with { MaxModifiers = 2 };
+        var cfg = new MovementConfig { MaxModifiers = 2 };
         var sys = Make(cfg);
         Assert.True(sys.AddModifier(new StunModifier(1f)));
         Assert.True(sys.AddModifier(new StunModifier(1f)));

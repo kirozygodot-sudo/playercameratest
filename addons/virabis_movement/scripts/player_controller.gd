@@ -28,6 +28,23 @@ enum SprintMode { HOLD, TOGGLE, DOUBLE_TAP }
 var _sprint_toggle_state := false
 var _last_forward_time := 0.0
 
+func _ready() -> void:
+	movement.StateChanged.connect(_on_movement_state_changed)
+
+
+func _on_movement_state_changed(new_state: int) -> void:
+	# MovementState enum: { Idle, Moving, Sprinting, Airborne, Flying }
+	var is_on_ground_now := new_state <= 2 # Idle, Moving, Sprinting
+	
+	if not _was_on_floor and is_on_ground_now:
+		# Yere iniş titremesi
+		if camera._active_mode is OrbitCameraMode:
+			(camera._active_mode as OrbitCameraMode).add_shake(0.15)
+		landed.emit()
+	
+	_was_on_floor = is_on_ground_now
+
+
 @onready var movement : Node = $"../MovementNode"
 @onready var camera   : Node = $"../CameraRig"
 @onready var _character : CharacterBody3D = get_parent()
@@ -76,11 +93,11 @@ func _get_sprint_input(delta: float) -> bool:
 func _physics_process(_delta: float) -> void:
 	_update_movement_direction()
 	_handle_jump()
-	_check_landing()
+	# _check_landing() artık sinyal ile yönetiliyor
 	_handle_slide()
-	_handle_crouch()
 	_handle_wall_jump()
 	_update_grapple()
+	_handle_crouch_input(_delta)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -89,14 +106,7 @@ func _physics_process(_delta: float) -> void:
 
 var _was_on_floor := true
 
-func _check_landing() -> void:
-	var is_on_floor : bool = _character.is_on_floor()
-	if not _was_on_floor and is_on_floor:
-		# Yere iniş titremesi
-		if camera._active_mode is OrbitCameraMode:
-			(camera._active_mode as OrbitCameraMode).add_shake(0.15)
-			landed.emit()
-	_was_on_floor = is_on_floor
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -126,12 +136,20 @@ func _update_movement_direction() -> void:
 
 
 func _handle_jump() -> void:
-	if Input.is_action_just_pressed("jump"):
-		movement.call("RequestJump")
-		jumped.emit()
-		# Zıplama titremesi
-		if camera._active_mode is OrbitCameraMode:
-			(camera._active_mode as OrbitCameraMode).add_shake(0.08)
+        if Input.is_action_just_pressed("jump"):
+            if _crouch_charge >= 0.1: # Minimum charge süresi
+                movement.call("ApplyCrouchJump", 1.5, 0.1, _crouch_charge, 0.3) # Varsayılan değerler
+                _crouch_charge = 0.0 # Charge'ı sıfırla
+
+                jumped.emit()
+                if camera._active_mode is OrbitCameraMode:
+                    (camera._active_mode as OrbitCameraMode).add_shake(0.1)
+            else:
+                movement.call("RequestJump")
+                jumped.emit()
+                # Zıplama titremesi
+                if camera._active_mode is OrbitCameraMode:
+                    (camera._active_mode as OrbitCameraMode).add_shake(0.08)
 	
 	# Ground Slam - Ctrl tuşu ile hızlı düşüş
 	if Input.is_action_just_pressed("crouch") and not _character.is_on_floor():
@@ -145,53 +163,39 @@ func _handle_jump() -> void:
 # SLIDE MECHANIC
 # ─────────────────────────────────────────────────────────────────────────────
 
-var _is_sliding := false
-var _slide_timer := 0.0
+var _crouch_charge := 0.0
+
+func _handle_crouch_input(delta: float) -> void:
+	# Çömelme charge yönetimi
+	if Input.is_action_pressed("crouch"):
+		_crouch_charge += delta
+		_crouch_charge = min(_crouch_charge, 0.3)  # Max charge
+	else:
+		_crouch_charge = 0.0
 
 func _handle_slide() -> void:
-	# Slide başlat (çömelme + sprint)
-	if Input.is_action_just_pressed("crouch") and _get_sprint_input(get_physics_process_delta_time()) and not _is_sliding:
-		_is_sliding = true
-		_slide_timer = 2.0  # Max slide süresi
-		slide_started.emit()
-		movement.call("ApplySlide", 3.0, 2.0, 0.6, 2.0, 1.5)
-		
-		# Slide kamera shake
-		if camera._active_mode is OrbitCameraMode:
-			(camera._active_mode as OrbitCameraMode).add_shake(0.1)
-	
-	# Slide melee attack
-	if _is_sliding and Input.is_action_just_pressed("attack"):
-		slide_attacked.emit()
-		# Attack boost
-		if camera._active_mode is OrbitCameraMode:
-			(camera._active_mode as OrbitCameraMode).add_shake(0.12)
-	
-	# Slide kontrolü
-	if _is_sliding:
-		_slide_timer -= get_physics_process_delta_time()
-		if _slide_timer <= 0.0 or not Input.is_action_pressed("crouch"):
-			_is_sliding = false
+		# Slide başlat (çömelme + sprint)
+		if Input.is_action_just_pressed("crouch") and _get_sprint_input(get_physics_process_delta_time()):
+			movement.call("ApplySlide", 3.0, 2.0, 0.6, 2.0, 1.5)
+			slide_started.emit()
+			# Slide kamera shake
+			if camera._active_mode is OrbitCameraMode:
+				(camera._active_mode as OrbitCameraMode).add_shake(0.1)
+
+		# Slide melee attack
+		if Input.is_action_just_pressed("attack"):
+			movement.call("PerformSlideAttack")
+			slide_attacked.emit()
+			# Attack boost
+			if camera._active_mode is OrbitCameraMode:
+				(camera._active_mode as OrbitCameraMode).add_shake(0.12)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CROUCH JUMP MECHANIC
 # ─────────────────────────────────────────────────────────────────────────────
 
-var _is_crouching := false
-var _crouch_charge := 0.0
 
-func _handle_crouch() -> void:
-	# Çömelme charge
-	if Input.is_action_pressed("crouch"):
-		_is_crouching = true
-		_crouch_charge += get_physics_process_delta_time()
-		_crouch_charge = min(_crouch_charge, 0.3)  # Max charge
-	else:
-		if _is_crouching:
-			# Çömelme bırakıldı
-			_is_crouching = false
-			_crouch_charge = 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -213,13 +217,16 @@ func _handle_wall_jump() -> void:
 		query.to = _character.global_position + _character.velocity.normalized() * 1.5
 		query.exclude = [_character]
 		
-		var result : Dictionary = space_state.intersect_ray(query)
-		if result:
-			_wall_jump_cooldown = 0.3
-			momentum_transferred.emit()
-			# Wall jump shake
-			if camera._active_mode is OrbitCameraMode:
-				(camera._active_mode as OrbitCameraMode).add_shake(0.06)
+            var result : Dictionary = space_state.intersect_ray(query)
+            if result:
+                var wall_normal : Vector3 = result.normal
+                var current_velocity : Vector3 = _character.velocity
+                if movement.call("TryWallJump", wall_normal, current_velocity, true):
+                    _wall_jump_cooldown = 0.3
+                    momentum_transferred.emit()
+                    # Wall jump shake
+                    if camera._active_mode is OrbitCameraMode:
+                        (camera._active_mode as OrbitCameraMode).add_shake(0.06)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -237,21 +244,24 @@ func _update_grapple() -> void:
 		query.to = camera.global_position + camera.call("get_forward") * 30.0
 		query.exclude = [_character]
 		
-		var result : Dictionary = space_state.intersect_ray(query)
-		if result:
-			_grapple_active = true
-			grapple_fired.emit()
-			# Grapple start shake
-			if camera._active_mode is OrbitCameraMode:
-				(camera._active_mode as OrbitCameraMode).add_shake(0.05)
+            var result : Dictionary = space_state.intersect_ray(query)
+            if result:
+                var anchor_point : Vector3 = result.position
+                movement.call("ApplyGrapple", anchor_point)
+                _grapple_active = true
+                grapple_fired.emit()
+                # Grapple start shake
+                if camera._active_mode is OrbitCameraMode:
+                    (camera._active_mode as OrbitCameraMode).add_shake(0.05)
 	
 	# Grapple release
-	if _grapple_active and Input.is_action_just_released("grapple"):
-		_grapple_active = false
-		grapple_released.emit()
-		# Launch boost check
-		if camera._active_mode is OrbitCameraMode:
-			(camera._active_mode as OrbitCameraMode).add_shake(0.08)
+        if _grapple_active and Input.is_action_just_released("grapple"):
+            movement.call("ReleaseGrapple")
+            _grapple_active = false
+            grapple_released.emit()
+            # Launch boost check
+            if camera._active_mode is OrbitCameraMode:
+                (camera._active_mode as OrbitCameraMode).add_shake(0.08)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

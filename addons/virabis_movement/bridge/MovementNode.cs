@@ -19,6 +19,7 @@ public partial class MovementNode : Node
     [Export] public float           GroundSlamGravity { get; set; } = 3.0f;  // Ground slam çarpan
 
     // ── Core ──────────────────────────────────────────────────────────────────
+    [Export] public MovementConfig Config { get; set; } = null!;
     private MovementSystem _system = null!;
 
     // ── Vertical (Bridge yönetir, Core bilmez) ───────────────────────────────
@@ -50,7 +51,7 @@ public partial class MovementNode : Node
 
     public override void _Ready()
     {
-        _system  = new MovementSystem(MovementConfig.Default);
+        _system  = new MovementSystem(Config);
         _gravity = ProjectSettings.GetSetting("physics/3d/default_gravity").AsSingle();
     }
 
@@ -99,7 +100,8 @@ public partial class MovementNode : Node
             IsFlying        = _flying,
             JumpRequested   = jumpRequested,
             JumpsRemaining  = _system.JumpsRemaining,
-            DeltaTime       = dt
+            DeltaTime       = dt,
+            CurrentPosition = new System.Numerics.Vector3(Character.GlobalPosition.X, Character.GlobalPosition.Y, Character.GlobalPosition.Z)
         };
 
         var result = _system.Update(ctx);
@@ -193,14 +195,28 @@ public partial class MovementNode : Node
     /// <summary>Slide Melee Combo - kayma + saldırı</summary>
     public void ApplySlide(float friction = 3f, float maxDuration = 2f, float exitMomentum = 0.6f,
         float attackDamageMult = 2f, float attackSpeedBoost = 1.5f)
-        => _system.AddModifier(new SlideModifier(friction, maxDuration, exitMomentum, 
-            attackDamageMult, attackSpeedBoost));
+    {
+        var modifier = new SlideModifier(friction, maxDuration, exitMomentum, attackDamageMult, attackSpeedBoost);
+        if (_system.AddModifier(modifier))
+        {
+            modifier.StartSlide(
+                new System.Numerics.Vector3(Character.Velocity.X, 0f, Character.Velocity.Z),
+                new System.Numerics.Vector3(Character.Velocity.X, 0f, Character.Velocity.Z).Length()
+            );
+        }
+    }
 
     /// <summary>Grapple Hook - ip fizikçisi</summary>
-    public void ApplyGrapple(float springStrength = 150f, float damping = 8f, 
+    public void ApplyGrapple(Godot.Vector3 anchorPoint, float springStrength = 150f, float damping = 8f, 
         float maxLength = 30f, float minLength = 2f, float pullSpeed = 15f, float launchBoost = 1.5f)
-        => _system.AddModifier(new GrappleModifier(springStrength, damping, maxLength, 
-            minLength, pullSpeed, launchBoost));
+    {
+        var modifier = new GrappleModifier(springStrength, damping, maxLength, minLength, pullSpeed, launchBoost);
+        if (_system.AddModifier(modifier))
+        {
+            modifier.StartGrapple(new System.Numerics.Vector3(anchorPoint.X, anchorPoint.Y, anchorPoint.Z), 
+                                  new System.Numerics.Vector3(Character.GlobalPosition.X, Character.GlobalPosition.Y, Character.GlobalPosition.Z));
+        }
+    }
 
     /// <summary>Time Dilation - low health slow-mo</summary>
     public void ApplyTimeDilation(float healthThreshold = 0.25f, float slowScale = 0.5f, 
@@ -244,6 +260,41 @@ public partial class MovementNode : Node
             transferWindow, maxChainCount));
 
     public void ClearAllModifiers() => _system.ClearModifiers();
+
+    public void PerformSlideAttack()
+    {
+        var slideModifier = _system.GetModifiers().OfType<SlideModifier>().FirstOrDefault();
+        if (slideModifier != null)
+        {
+            slideModifier.PerformAttack();
+        }
+    }
+
+    public bool TryWallJump(Godot.Vector3 wallNormal, Godot.Vector3 currentVelocity, bool isWallJumpRequested)
+    {
+        var wallJumpModifier = _system.GetModifiers().OfType<WallJumpModifier>().FirstOrDefault();
+        if (wallJumpModifier != null)
+        {
+            return wallJumpModifier.TryWallBounce(
+                new System.Numerics.Vector3(wallNormal.X, wallNormal.Y, wallNormal.Z),
+                new System.Numerics.Vector3(currentVelocity.X, currentVelocity.Y, currentVelocity.Z),
+                isWallJumpRequested
+            );
+        }
+        return false;
+    }
+
+    public void ReleaseGrapple()
+    {
+        foreach (var modifier in _system.GetModifiers())
+        {
+            if (modifier is GrappleModifier grappleModifier)
+            {
+                grappleModifier.ReleaseGrapple();
+                break;
+            }
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // CONFIG

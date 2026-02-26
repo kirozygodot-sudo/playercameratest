@@ -39,8 +39,7 @@ public partial class MovementBridge : Node
     public void ApplyGrapple(Vector3 anchorPoint, float springStrength = 150f, float damping = 8f,
         float maxLength = 30f, float minLength = 2f, float pullSpeed = 15f, float launchBoost = 1.5f)
     {
-        _movement.ApplyGrapple(springStrength, damping, maxLength, minLength, pullSpeed, launchBoost);
-        // Anchor point should be set in GrappleModifier via a different mechanism
+        _movement.ApplyGrapple(anchorPoint, springStrength, damping, maxLength, minLength, pullSpeed, launchBoost);
     }
     
     // ── TIME DILATION ───────────────────────────────────────────────────────
