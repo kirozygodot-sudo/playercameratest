@@ -6,7 +6,7 @@ Bu rehber, Virabis Movement System içindeki 10 gelişmiş hareket mekaniğinin 
 
 **Mekanik Özeti:** Karakteri bir hedef noktaya doğru fiziksel olarak çeker ve bırakıldığında ivme kazandırır. Geliştirilmiş spring-damper fiziği sayesinde, damping kuvveti çekim kuvvetini tamamen sıfırlamaz, her zaman hedefe yönelim sağlar. Bu, daha gerçekçi ve kontrol edilebilir bir salınım (swing) mekaniği sunar.
 
-**Core Developer (C#) Notu:** `GrappleModifier.cs` içinde `_springStrength`, `_damping`, `_maxLength`, `_minLength`, `_pullSpeed` ve `_launchBoost` parametreleri ile ayarlanır. Damping hesaplaması, hızın ip yönündeki bileşenine (radial velocity) uygulanarak hedefe yönelimi korur. Maksimum ip uzunluğuna %20 tolerans eklenmiştir.
+**Core Developer (C#) Notu:** `GrappleModifier.cs` içinde `_springStrength`, `_damping`, `_maxLength`, `_minLength`, `_pullSpeed` ve `_launchBoost` parametreleri ile ayarlanır. Damping hesaplaması, hızın ip yönündeki bileşenine (radial velocity) uygulanarak hedefe yönelimi korur. Maksimum ip uzunluğuna %20 tolerans eklenmiştir. **GÜNCELLEME:** Grapple başladığında `MovementEvents.EventType.GrappleStarted` ve bittiğinde `MovementEvents.EventType.GrappleReleased` eventleri yayınlanır, bu da "Kinetic Chain" için bir tetikleyici görevi görür.
 
 **Gameplay Programmer (GDScript) Notu:**
 *   **Tetikleme:** `movement.call("ApplyGrapple", anchor_point)`
@@ -24,7 +24,7 @@ if Input.is_action_just_released("grapple"):
     movement.call("ReleaseGrapple")
 ```
 
-**Technical Designer Notu:** `GrappleModifier` parametreleri, `ApplyGrapple` metoduna doğrudan geçirilerek veya `MovementConfig` içinde varsayılan değerler tanımlanarak ayarlanabilir. `springStrength` ve `damping` değerleri, kancanın ne kadar "sert" veya "yumuşak" hissettireceğini belirler. `maxLength` ve `minLength` ise ipin fiziksel sınırlarını tanımlar.
+**Technical Designer Notu:** `GrappleModifier` parametreleri, `ApplyGrapple` metoduna doğrudan geçirilerek veya `MovementConfig` içinde varsayılan değerler tanımlanarak ayarlanabilir. `springStrength` ve `damping` değerleri, kancanın ne kadar "sert" veya "yumuşak" hissettireceğini belirler. `maxLength` ve `minLength` ise ipin fiziksel sınırlarını tanımlar. **GÜNCELLEME:** `MovementGates.SetGate(MovementGates.GateType.CanGrapple, () => true)` ile grapple yeteneği dinamik olarak açılıp kapatılabilir.
 
 **UX Designer Notu:** Oyuncuya kancanın hedefe kilitlendiğini gösteren görsel bir geri bildirim (örneğin, nişangah değişimi) ve başarılı bir çekişte tatmin edici bir ses efekti eklenmesi, mekaniğin hissiyatını artıracaktır.
 
@@ -34,7 +34,7 @@ if Input.is_action_just_released("grapple"):
 
 **Mekanik Özeti:** Hızlı hareket ederken yere çömelerek kaymanızı sağlar. Kayma sırasında yapılan saldırılar hasar bonusu alabilir.
 
-**Core Developer (C#) Notu:** `SlideModifier.cs` içinde `_friction`, `_maxDuration`, `_exitMomentum`, `_attackDamageMult` ve `_attackSpeedBoost` parametreleri ile yönetilir. Kayma başladığında karakterin mevcut yatay hızını korur ve sürtünme ile yavaşlatır.
+**Core Developer (C#) Notu:** `SlideModifier.cs` içinde `_friction`, `_maxDuration`, `_exitMomentum`, `_attackDamageMult` ve `_attackSpeedBoost` parametreleri ile yönetilir. Kayma başladığında karakterin mevcut yatay hızını korur ve sürtünme ile yavaşlatır. **GÜNCELLEME:** Kayma başladığında `MovementEvents.EventType.SlideStarted` ve bittiğinde `MovementEvents.EventType.SlideEnded` eventleri yayınlanır.
 
 **Gameplay Programmer (GDScript) Notu:**
 *   **Tetikleme:** `movement.call("ApplySlide", friction, duration, exit_momentum, damage_mult, speed_boost)`
@@ -212,7 +212,7 @@ if Input.is_action_pressed("aim") and not is_on_floor():
 
 **Mekanik Özeti:** Yerdeki bir dash veya patlama ivmesini zıplayarak havaya aktarmanızı ve korumanızı sağlar.
 
-**Core Developer (C#) Notu:** `AirMomentumTransferModifier.cs` (varsa) veya `MovementSystem` içinde yerdeki ivmeyi yakalar ve `retention` ile `chain_mult` parametrelerine göre havada korur veya artırır. `window` ve `max_chain` ile zincirleme mekaniğini yönetir.
+**Core Developer (C#) Notu:** `AirMomentumTransferModifier.cs` (varsa) veya `MovementSystem` içinde yerdeki ivmeyi yakalar ve `retention` ile `chain_mult` parametrelerine göre havada korur veya artırır. `window` ve `max_chain` ile zincirleme mekaniğini yönetir. **GÜNCELLEME:** `MovementEvents.EventType.DashEnded` gibi eventleri dinleyerek ivme transferini tetikleyebilir.
 
 **Gameplay Programmer (GDScript) Notu:**
 *   **Tetikleme:** `movement.call("ApplyAirMomentumTransfer", retention, chain_mult, window, max_chain)`
