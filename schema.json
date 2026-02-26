@@ -1,0 +1,434 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Modular Factory Command Schema v4.0",
+  "description": "AI ↔ Blender JSON command protocol for the Modular Factory system. All distances in metres. Grid: 1 m base, 0.25 m sub-grid.",
+  "type": "object",
+  "required": ["action", "params"],
+  "additionalProperties": false,
+
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "The operation to perform.",
+      "enum": [
+        "SETUP_SCENE",
+        "CREATE_WALL",
+        "CREATE_FLOOR",
+        "CREATE_PILLAR",
+        "CREATE_BEAM",
+        "CREATE_STAIRCASE",
+        "CREATE_ROOM",
+        "CREATE_BUILDING",
+        "CREATE_STREET",
+        "MODIFY_PARAM",
+        "SET_STYLE",
+        "ADD_MODIFIER",
+        "EXPORT_GODOT",
+        "LIST_OBJECTS",
+        "DELETE_OBJECT"
+      ]
+    },
+
+    "params": {
+      "type": "object",
+      "description": "Action-specific parameters.",
+
+      "properties": {
+
+        "name": {
+          "type": "string",
+          "description": "Blender object name. Will be prefixed MF_ automatically if absent.",
+          "pattern": "^[A-Za-z0-9_]+$"
+        },
+
+        "location": {
+          "type": "array",
+          "description": "[X, Y, Z] world position in metres. Pivot = bottom-left corner.",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [0, 0, 0]
+        },
+
+        "width": {
+          "type": "number",
+          "description": "Width along X axis (metres).",
+          "minimum": 0.25,
+          "default": 4.0
+        },
+
+        "depth": {
+          "type": "number",
+          "description": "Depth along Y axis (metres). Used for floors, rooms, buildings.",
+          "minimum": 0.25,
+          "default": 4.0
+        },
+
+        "height": {
+          "type": "number",
+          "description": "Height along Z axis (metres). Auto-calculated from floor_index if omitted.",
+          "minimum": 0.5,
+          "default": 3.0
+        },
+
+        "thickness": {
+          "type": "number",
+          "description": "Wall or slab thickness (metres).",
+          "minimum": 0.05,
+          "maximum": 1.0,
+          "default": 0.2
+        },
+
+        "floors": {
+          "type": "integer",
+          "description": "Number of floors for a building.",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 2
+        },
+
+        "floor_index": {
+          "type": "integer",
+          "description": "Zero-based floor index. 0 = ground floor (4 m height), ≥1 = upper floor (3 m).",
+          "minimum": 0,
+          "default": 1
+        },
+
+        "rooms_per_floor": {
+          "type": "integer",
+          "description": "How many rooms to place side-by-side on each floor.",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 1
+        },
+
+        "style": {
+          "type": "string",
+          "description": "Visual style DNA to apply.",
+          "enum": ["DEFAULT", "SCIFI", "CYBERPUNK", "MODERN", "INDUSTRIAL"],
+          "default": "DEFAULT"
+        },
+
+        "door_count": {
+          "type": "integer",
+          "description": "Number of door openings in this wall.",
+          "minimum": 0,
+          "maximum": 4,
+          "default": 0
+        },
+
+        "door_width": {
+          "type": "number",
+          "description": "Door opening width (metres).",
+          "minimum": 0.7,
+          "maximum": 2.4,
+          "default": 0.9
+        },
+
+        "door_height": {
+          "type": "number",
+          "description": "Door opening height (metres).",
+          "minimum": 1.95,
+          "maximum": 2.8,
+          "default": 2.1
+        },
+
+        "window_count": {
+          "type": "integer",
+          "description": "Number of window openings in this wall.",
+          "minimum": 0,
+          "maximum": 8,
+          "default": 1
+        },
+
+        "window_width": {
+          "type": "number",
+          "description": "Window opening width (metres).",
+          "minimum": 0.5,
+          "maximum": 3.0,
+          "default": 1.0
+        },
+
+        "window_height": {
+          "type": "number",
+          "description": "Window opening height (metres).",
+          "minimum": 0.5,
+          "maximum": 2.2,
+          "default": 1.2
+        },
+
+        "sill_height": {
+          "type": "number",
+          "description": "Window sill height from floor (metres).",
+          "minimum": 0.6,
+          "maximum": 1.2,
+          "default": 0.9
+        },
+
+        "ceiling": {
+          "type": "boolean",
+          "description": "Whether to generate a ceiling slab for this room.",
+          "default": true
+        },
+
+        "stairs": {
+          "type": "boolean",
+          "description": "Whether to generate a staircase leading to the next floor.",
+          "default": false
+        },
+
+        "doors": {
+          "type": "array",
+          "description": "Per-wall door configuration for CREATE_ROOM.",
+          "items": {
+            "type": "object",
+            "required": ["wall", "count"],
+            "properties": {
+              "wall":  { "type": "string", "enum": ["north", "south", "east", "west"] },
+              "count": { "type": "integer", "minimum": 0, "maximum": 2 }
+            }
+          }
+        },
+
+        "windows": {
+          "type": "array",
+          "description": "Per-wall window configuration for CREATE_ROOM.",
+          "items": {
+            "type": "object",
+            "required": ["wall", "count"],
+            "properties": {
+              "wall":  { "type": "string", "enum": ["north", "south", "east", "west"] },
+              "count": { "type": "integer", "minimum": 0, "maximum": 4 }
+            }
+          }
+        },
+
+        "length": {
+          "type": "number",
+          "description": "Length of a beam or street segment (metres).",
+          "minimum": 0.5,
+          "default": 4.0
+        },
+
+        "axis": {
+          "type": "string",
+          "description": "Primary axis for beams or array modifiers.",
+          "enum": ["X", "Y", "Z"],
+          "default": "X"
+        },
+
+        "stair_width": {
+          "type": "number",
+          "description": "Width of staircase (metres). Minimum ergonomic: 0.9 m.",
+          "minimum": 0.9,
+          "maximum": 3.0,
+          "default": 1.2
+        },
+
+        "floor_height": {
+          "type": "number",
+          "description": "Height between floors for staircase calculation (metres).",
+          "minimum": 2.4,
+          "maximum": 6.0,
+          "default": 3.0
+        },
+
+        "side": {
+          "type": "number",
+          "description": "Pillar cross-section side length (metres, square cross-section).",
+          "minimum": 0.1,
+          "maximum": 1.0,
+          "default": 0.4
+        },
+
+        "plots": {
+          "type": "integer",
+          "description": "Number of building plots along the street.",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 3
+        },
+
+        "object": {
+          "type": "string",
+          "description": "Target object name for MODIFY_PARAM / ADD_MODIFIER / DELETE_OBJECT."
+        },
+
+        "param": {
+          "type": "string",
+          "description": "Geometry Nodes socket name or custom property key to modify."
+        },
+
+        "value": {
+          "description": "New value for the parameter (number, integer, boolean, or string)."
+        },
+
+        "type": {
+          "type": "string",
+          "description": "Modifier type for ADD_MODIFIER.",
+          "enum": ["ARRAY", "MIRROR", "BEVEL", "SOLIDIFY", "SUBDIVISION"]
+        },
+
+        "count": {
+          "type": "integer",
+          "description": "Array modifier repeat count.",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 2
+        },
+
+        "fit_length": {
+          "type": ["number", "null"],
+          "description": "Array modifier FIT_LENGTH mode. Set to null to use count instead.",
+          "minimum": 0
+        },
+
+        "segments": {
+          "type": "integer",
+          "description": "Bevel modifier segment count.",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 2
+        },
+
+        "levels": {
+          "type": "integer",
+          "description": "Subdivision modifier viewport level.",
+          "minimum": 1,
+          "maximum": 6,
+          "default": 1
+        },
+
+        "axis_x": { "type": "boolean", "default": true,  "description": "Mirror on X axis." },
+        "axis_y": { "type": "boolean", "default": false, "description": "Mirror on Y axis." },
+        "axis_z": { "type": "boolean", "default": false, "description": "Mirror on Z axis." },
+
+        "damage": {
+          "type": "number",
+          "description": "Surface damage/wear level (0 = pristine, 1 = heavily damaged).",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.0
+        },
+
+        "objects": {
+          "type": ["array", "null"],
+          "description": "Object names to include in Godot export. Null = export all MF_Exports collection.",
+          "items": { "type": "string" }
+        },
+
+        "output": {
+          "type": "string",
+          "description": "Output file path for Godot export (.glb).",
+          "default": "/tmp/mf_export.glb"
+        },
+
+        "collision": {
+          "type": "boolean",
+          "description": "Auto-generate -col collision meshes on export.",
+          "default": true
+        },
+
+        "materials": {
+          "type": "boolean",
+          "description": "Export PBR materials with the .glb file.",
+          "default": true
+        },
+
+        "apply_modifiers": {
+          "type": "boolean",
+          "description": "Apply all modifiers before Godot export.",
+          "default": true
+        },
+
+        "collection": {
+          "type": "string",
+          "description": "Filter LIST_OBJECTS by this collection name.",
+          "enum": ["MF_Atomics", "MF_Assembled", "MF_Buildings", "MF_Streets", "MF_Exports"]
+        },
+
+        "dna_dir": {
+          "type": ["string", "null"],
+          "description": "Path to directory containing dna_*.json style files.",
+          "default": null
+        },
+
+        "name_override": {
+          "type": "string",
+          "description": "Override style DNA name in SET_STYLE.",
+          "enum": ["DEFAULT", "SCIFI", "CYBERPUNK", "MODERN", "INDUSTRIAL"]
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "action": "CREATE_ROOM",
+      "params": {
+        "name": "LivingRoom_F1",
+        "width": 5.0,
+        "depth": 4.0,
+        "floor_index": 1,
+        "style": "MODERN",
+        "location": [0, 0, 3],
+        "doors":   [{ "wall": "south", "count": 1 }],
+        "windows": [{ "wall": "north", "count": 2 }, { "wall": "east", "count": 1 }],
+        "ceiling": true,
+        "stairs": false
+      }
+    },
+    {
+      "action": "CREATE_BUILDING",
+      "params": {
+        "name": "CornerShop_01",
+        "floors": 3,
+        "width": 8.0,
+        "depth": 6.0,
+        "style": "CYBERPUNK",
+        "rooms_per_floor": 2,
+        "location": [0, 0, 0]
+      }
+    },
+    {
+      "action": "ADD_MODIFIER",
+      "params": {
+        "object": "MF_Wall_Test",
+        "type": "ARRAY",
+        "axis": "X",
+        "count": 5
+      }
+    },
+    {
+      "action": "MODIFY_PARAM",
+      "params": {
+        "object": "MF_Wall_Test",
+        "param": "Window_Count",
+        "value": 3
+      }
+    },
+    {
+      "action": "EXPORT_GODOT",
+      "params": {
+        "objects": ["LivingRoom_F1", "CornerShop_01"],
+        "output": "/projects/my_game/assets/building_01.glb",
+        "collision": true,
+        "materials": true
+      }
+    },
+    {
+      "action": "SET_STYLE",
+      "params": { "name": "SCIFI" }
+    },
+    {
+      "action": "CREATE_STREET",
+      "params": {
+        "name": "MainStreet",
+        "length": 60.0,
+        "plots": 5,
+        "style": "CYBERPUNK",
+        "location": [0, 0, 0]
+      }
+    }
+  ]
+}
