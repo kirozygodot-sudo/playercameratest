@@ -1,119 +1,178 @@
-# Virabis Movement System: Teknik Dokümantasyon (Godot 4.6 .NET)
+# Virabis Movement System: Tak-Çalıştır Teknik Dokümantasyon (Godot 4.6 .NET)
 
-Bu dokümantasyon, **Godot 4.6** motoru üzerinde geliştirilen, C# çekirdekli ve GDScript arayüzlü gelişmiş bir karakter hareket sistemini detaylandırmaktadır. Sistem, yüksek performanslı bir hareket çekirdeği ile 10 adet uzman seviye mekaniği bir araya getirir. Bu güncelleme ile kamera sistemi önemli ölçüde geliştirilmiş, kritik hatalar giderilmiş ve mimari daha modüler hale getirilmiştir.
+Bu dokümantasyon, **Godot 4.6** motoru üzerinde geliştirilen, C# çekirdekli ve GDScript arayüzlü gelişmiş bir karakter hareket sistemini, farklı uzmanlık alanlarından 10 profesyonelin bakış açısıyla detaylandırmaktadır. Amacımız, sistemin her bileşenini "Tak-Çalıştır" prensibiyle açıklamak, böylece her ekip üyesinin kendi sorumluluk alanındaki parçayı kolayca anlayıp entegre edebilmesini sağlamaktır.
 
-## 1. Sistem Mimarisi
+## 1. Proje Yöneticisi Perspektifi: Sisteme Genel Bakış
 
-Sistem, **Hibrit Mimari** prensibiyle tasarlanmıştır. Bu yapı, C#`ın hesaplama gücü ile GDScript`in esnekliğini birleştirir.
+**Sorumluluk Alanı:** Proje hedefleri, ekip koordinasyonu, zaman çizelgesi ve kaynak yönetimi.
 
-| Katman | Teknoloji | Sorumluluk |
-| :--- | :--- | :--- |
-| **Orkestrasyon (Gameplay)** | GDScript | Input yönetimi, animasyon/VFX/SFX tetikleme, C# Core ile Godot arasındaki köprüyü kurma. | `player_controller.gd`, `camera_controller.gd` |
-| **Köprü (Bridge)** | C# (.NET) | GDScript`ten gelen çağrıları C# Core sistemine iletmek ve Godot tiplerini (Vector3 vb.) .NET tiplerine dönüştürmek. | `MovementNode.cs`, `MovementBridge.cs` |
-| **Çekirdek (Core)** | C# | Tüm hareket fiziği, state yönetimi ve modifier (yetenek) mantığının işlendiği saf, motorsuz C# katmanı. `IMovementSystem` arayüzü ile soyutlanmıştır. | `MovementSystem.cs`, `IMovementModifier.cs`, `IMovementSystem.cs` |
-| **Decorator (Sudo)** | C# (.NET) | `IMovementSystem` arayüzünü uygulayarak mevcut hareket sistemine "sudo" yetkileri (GodMode, NoClip vb.) ekler. | `SudoMovementDecorator.cs` |
+Virabis Movement System, Godot 4.6 için geliştirilmiş, yüksek performanslı ve modüler bir karakter hareket çözümüdür. C# tabanlı bir çekirdek (Core) ile GDScript tabanlı bir kontrol katmanını (Controller) birleştirerek esneklik ve performans dengesi sunar. Sistem, 10 uzman seviye hareket mekaniği, dinamik kamera sistemleri ve geliştirilmiş hata ayıklama araçları içerir. Son güncellemelerle birlikte, mimari olarak daha da güçlendirilmiş, "sudo" yetkileri için Decorator Pattern, akıcı kamera geçişleri için bir Mikser ve kolay konfigürasyon için Data-Driven Preset Kütüphanesi eklenmiştir. Bu yapı, hızlı prototipleme ve uzun vadeli sürdürülebilirlik için idealdir.
+
+**Temel Avantajlar:**
+*   **Hibrit Mimari:** C# performansı ve GDScript esnekliği bir arada.
+*   **Modüler Tasarım:** Yeni mekanikler ve özellikler mevcut sistemi bozmadan eklenebilir.
+*   **AAA Kalitesinde Kamera:** Dinamik FOV, sarsıntı ve pürüzsüz geçişler.
+*   **Veri Odaklı Konfigürasyon:** `MovementConfig` presetleri ile hızlı iterasyon.
+*   **Gelişmiş Hata Ayıklama:** Kapsamlı debug araçları ve görsel panel.
+
+## 2. Core Developer (C#) Perspektifi: Çekirdek ve Mimari
+
+**Sorumluluk Alanı:** C# Core katmanının geliştirilmesi, mimari tasarım, performans optimizasyonu.
+
+C# Core, tüm hareket fiziği hesaplamalarının yapıldığı, Godot bağımlılıklarından arındırılmış saf bir katmandır. `IMovementSystem` arayüzü, hareket sisteminin soyutlanmasını sağlar ve **Decorator Pattern** için temel oluşturur. `MovementSystem.cs` bu arayüzü uygulayan ana sınıftır.
+
+### 2.1. `IMovementSystem` ve `MovementSystem.cs`
+`IMovementSystem` arayüzü, `MovementSystem` sınıfının dış dünyaya sunduğu API'yi tanımlar. Bu sayede, `MovementSystem`'in yerine `SudoMovementDecorator` gibi farklı uygulamalar geçirilebilir. `MovementSystem.cs`, `MovementContext` üzerinden gelen verilere göre karakterin hızını hesaplar, modifiye edicileri uygular ve yeni hızı döndürür.
+
+### 2.2. `IMovementModifier` ve Modifiye Edici Pipeline
+`IMovementModifier` arayüzü, `GrappleModifier`, `SlideModifier` gibi tüm hareket mekaniklerinin uyguladığı bir sözleşmedir. Her fizik karesinde, `MovementSystem` aktif modifiye edicileri bir pipeline içinde işler. Bu, mekaniklerin birbirini etkilemesini ve zincirlenmesini sağlar.
+
+### 2.3. `MovementConfig.cs` ve Validasyon
+`MovementConfig.cs`, karakterin tüm temel hareket parametrelerini (hızlar, ivmeler, sürtünmeler) içeren bir Godot `Resource`'udur. **ÖNEMLİ:** `[Export]` değerlerine C# tarafında `Mathf.Clamp` ve `Mathf.Max` ile validasyon eklenmiştir. Bu, editörden veya koddan girilen geçersiz değerlerin (negatif hız vb.) sistemin kararlılığını bozmasını engeller.
+
+### 2.4. `SudoMovementDecorator.cs` (Decorator Pattern)
+`SudoMovementDecorator`, `IMovementSystem` arayüzünü uygulayan ve mevcut `MovementSystem`'i sarmalayan bir sınıftır. Bu decorator, `GodMode`, `InfiniteJumps`, `NoClip` ve `SpeedMultiplier` gibi "sudo" yetkilerini ana hareket mantığından bağımsız olarak yönetir. Bu sayede, ana `MovementSystem` kodu temiz kalır ve admin/debug özellikleri modüler bir şekilde eklenebilir.
+
+### 2.5. `GrappleModifier.cs` Bug Fix
+`GrappleModifier.cs` içerisindeki spring-damper fiziği güncellenmiştir. Damping kuvveti artık çekim kuvvetini tamamen sıfırlamak yerine, hızın ip yönündeki bileşenine (radial velocity) uygulanır. Bu, grappling sırasında karakterin hedefe doğru yönelimini korurken daha gerçekçi bir salınım mekaniği sağlar.
+
+## 3. Gameplay Programmer (GDScript) Perspektifi: Kontrol ve Entegrasyon
+
+**Sorumluluk Alanı:** Kullanıcı girdileri, kamera kontrolü, animasyon ve ses entegrasyonu, GDScript tarafındaki oyun mantığı.
+
+GDScript katmanı, oyuncu girdilerini alır, kamera davranışını yönetir ve C# Core ile iletişim kurar. `MovementNode.cs` (Bridge) bu iki katman arasındaki ana bağlantıdır.
+
+### 3.1. `MovementNode.cs` (Bridge)
+`MovementNode`, Godot `Node`'u olarak C# Core sistemini Godot ortamına entegre eder. GDScript'ten gelen `ApplyGrapple()`, `SetSprinting()` gibi çağrıları C# Core'daki `IMovementSystem`'e iletir. `_PhysicsProcess` içinde `MovementContext` oluşturur ve `_system.Update()` çağrısını yapar. `SudoMovementDecorator`'ı varsayılan olarak kullanır ve `SetGodMode()`, `SetInfiniteJumps()`, `SetNoClip()`, `SetSpeedMultiplier()` gibi sudo yetkilerini GDScript'e açar.
+
+### 3.2. `player_controller.gd`
+Bu script, oyuncu girdilerini okur ve `MovementNode`'a iletir. `MovementNode`'dan gelen `StateChanged` sinyallerini dinleyerek animasyonları veya sesleri tetikleyebilir. `_check_landing` fonksiyonu `MovementNode`'un `StateChanged` sinyali ile optimize edilmiştir.
+
+### 3.3. `camera_controller.gd`
+Kamera sisteminin ana kontrolcüsüdür. `CameraModeBase`'den türetilmiş modları (Orbit, FirstPerson) yönetir. Dinamik FOV, kamera sarsıntısı ve hedef kilitleme (lock-on) mekaniklerini içerir.
+
+### 3.4. `orbit_camera_mode.gd` ve `first_person_camera_mode.gd`
+Bunlar `CameraModeBase`'den türetilmiş kamera modlarıdır. `orbit_camera_mode.gd` içinde `FastNoiseLite` tabanlı, farklı olaylar için profillerle (Landing, Explosion, Jump, Impact, Custom) gelişmiş kamera sarsıntısı ve hıza duyarlı dinamik FOV sistemi bulunur. `first_person_camera_mode.gd` ise birinci şahıs kamera davranışını tanımlar.
+
+### 3.5. Kamera Mikseri (Blending System)
+`camera_controller.gd` içerisinde kamera modları arasında geçiş yaparken (örneğin TPS'ten FPS'e veya araçtan inerken) `blend_duration` parametresi ile belirlenen süre boyunca iki modun kamera verileri (FOV, pozisyon, rotasyon) pürüzsüz bir şekilde `lerp` (doğrusal enterpolasyon) edilerek karıştırılır. Bu, ani kamera sıçramalarını önleyerek "AAA" kalitesinde akıcı geçişler sağlar.
+
+## 4. Technical Designer / Level Designer Perspektifi: Konfigürasyon ve Ayarlama
+
+**Sorumluluk Alanı:** Oyun mekaniklerinin ve seviye tasarımının teknik ayarları, dengeleme.
+
+Sistem, tasarımcıların kod yazmadan hareket ve kamera davranışını kolayca ayarlayabilmesi için veri odaklı bir yaklaşım benimser.
+
+### 4.1. `MovementConfig` Preset Kütüphanesi
+`addons/virabis_movement/presets/` dizini altında `ninja_preset.tres`, `tank_preset.tres` ve `god_preset.tres` gibi örnek `MovementConfig` presetleri oluşturulmuştur. Bu `.tres` dosyaları, `MovementNode` üzerindeki `Config` slotuna atanarak karakterin tüm hareket parametrelerini tek bir dosya değişikliği ile anında değiştirmeye olanak tanır. Bu, farklı karakter tipleri veya oyun durumları için hızlıca hareket parametrelerini ayarlama ve deneme esnekliği sunar.
+
+### 4.2. `SpringArm3D` Optimizasyonu
+`SpringArm3D`'nin `collision_margin` değeri 0.5'ten 0.1'e düşürülmüş ve `shape` özelliği `SphereShape3D` olarak ayarlanmıştır. Bu ayarlar, dar alanlarda kameranın titremesini ve takılmasını önleyerek daha akıcı bir deneyim sunar. Tasarımcılar, bu değerleri Godot editöründen kendi seviye tasarımlarına göre optimize edebilir.
+
+### 4.3. Kamera Sarsıntı Profilleri
+`orbit_camera_mode.gd` içindeki `LANDING`, `EXPLOSION`, `JUMP`, `IMPACT` gibi önceden tanımlanmış sarsıntı profilleri, farklı oyun içi olaylar için kamera geri bildirimini kolayca ayarlamanızı sağlar. Tasarımcılar, bu profillerin frekans, genlik ve azalma hızı gibi parametrelerini oyunun hissiyatına göre değiştirebilir.
+
+## 5. QA Engineer Perspektifi: Test ve Validasyon
+
+**Sorumluluk Alanı:** Sistem kararlılığı, hata tespiti, test senaryoları ve kullanıcı deneyimi doğrulaması.
+
+Sistem, sağlam bir test altyapısı ve hata önleme mekanizmaları ile geliştirilmiştir.
+
+### 5.1. `MovementConfig.cs` Validasyonu
+`MovementConfig.cs` içerisindeki `[Export]` değerlerine C# tarafında `Mathf.Clamp` ve `Mathf.Max` ile validasyon eklenmiştir. Bu, Godot editöründen veya koddan girilen geçersiz (negatif hız, sıfır ivme vb.) değerlerin sistemin kararlılığını bozmasını engeller. QA ekibi, bu validasyonların doğru çalıştığını ve beklenmedik değerlerin sisteme sızmadığını doğrulamalıdır.
+
+### 5.2. Debug Paneli ve Sudo Yetkileri
+`debug_panel.gd` aracılığıyla ekranda canlı olarak izlenebilen hareket durumu, aktif modifiye ediciler ve zıplama bilgileri, test süreçlerini büyük ölçüde kolaylaştırır. `SudoMovementDecorator` sayesinde `GodMode`, `InfiniteJumps`, `NoClip` gibi yetkiler, test senaryolarını hızlandırmak ve belirli durumları kolayca yeniden üretmek için kullanılabilir.
+
+### 5.3. Kamera Akıcılığı Testleri
+Kamera mikserinin (blending system) ve `SpringArm3D` optimizasyonunun, farklı kamera modları ve dar alanlarda akıcı geçişler sağladığı doğrulanmalıdır. Özellikle hızlı mod geçişleri ve çarpışma durumlarında kamera titremeleri veya ani sıçramalar test edilmelidir.
+
+## 6. UX Designer Perspektifi: Kullanıcı Deneyimi ve Geri Bildirim
+
+**Sorumluluk Alanı:** Oyuncu hissiyatı, geri bildirim mekanizmaları, arayüz ve etkileşim tasarımı.
+
+Sistem, oyuncuya zengin ve tatmin edici bir deneyim sunmak üzere tasarlanmıştır.
+
+### 6.1. Dinamik FOV ve Kamera Sarsıntısı
+*   **Dinamik FOV:** Karakterin hızına ve durumuna göre otomatik olarak ayarlanan FOV, oyuncuya hız ve hareket hissini daha iyi aktarır. Nişan alma sırasında daralan, sprint sırasında genişleyen FOV, oyuncunun odaklanmasına ve çevreyi algılamasına yardımcı olur.
+*   **Kamera Sarsıntısı:** `FastNoiseLite` tabanlı sarsıntı sistemi, inişler, patlamalar veya darbeler gibi olaylara fiziksel bir geri bildirim ekler. Bu, oyuncunun oyun dünyasıyla daha derin bir bağlantı kurmasını sağlar ve olayların etkisini artırır.
+
+### 6.2. Pürüzsüz Kamera Geçişleri
+Kamera mikseri (blending system) sayesinde modlar arası geçişler (FPS/TPS, araçtan inme vb.) ani sıçramalar yerine yumuşak ve doğal animasyonlarla gerçekleşir. Bu, oyuncunun göz yorgunluğunu azaltır ve kesintisiz bir deneyim sunar.
+
+### 6.3. Grapple Fiziği
+Geliştirilmiş grapple fiziği, oyuncuya daha kontrol edilebilir ve tatmin edici bir salınım mekaniği sunar. Damping kuvvetinin hedefe yönelimi koruması, oyuncunun grapple'ı daha stratejik kullanmasına olanak tanır.
+
+## 7. Performance Engineer / Optimizer Perspektifi: Kaynak Kullanımı ve Optimizasyon
+
+**Sorumluluk Alanı:** Oyunun performansını artırmak, bellek ve CPU kullanımını optimize etmek.
+
+Sistem, performans göz önünde bulundurularak tasarlanmıştır.
+
+### 7.1. C# Core Performansı
+C# Core katmanı, Godot'un GDScript'ine kıyasla daha yüksek hesaplama performansı sunar. Özellikle fizik hesaplamaları ve modifiye edici pipeline gibi yoğun işlemler C# tarafında gerçekleştirilerek CPU yükü optimize edilmiştir.
+
+### 7.2. `FastNoiseLite` ve Sarsıntı Optimizasyonu
+`FastNoiseLite` tabanlı kamera sarsıntısı, rastgele sayı üretimine kıyasla daha deterministik ve optimize edilmiş bir gürültü üretimi sağlar. Her profil için ayrı `FastNoiseLite` örnekleri kullanılması, hesaplama maliyetini dağıtır. Ancak, çok sayıda sarsıntı profilinin aynı anda aktif olması durumunda performans etkileri izlenmelidir.
+
+### 7.3. Modifiye Edici Yönetimi
+Modifiye edici pipeline, `List<IMovementModifier>` üzerinde çalışır ve `RemoveAll` gibi işlemlerle süresi dolan modifiye edicileri temizler. Bu işlemlerin her fizik karesinde yapılması, listenin boyutunu kontrol altında tutar ve gereksiz hesaplamaları önler.
+
+## 8. Sound Designer Perspektifi: Ses Entegrasyonu
+
+**Sorumluluk Alanı:** Oyun içi ses efektleri, müzik ve genel ses deneyimi.
+
+Sistem, ses tasarımcılarının hareket olaylarına kolayca tepki verebilmesi için sinyaller sağlar.
+
+### 8.1. `StateChanged` Sinyali
+`MovementNode`'dan yayılan `StateChanged` sinyali, karakterin hareket durumundaki değişiklikleri (Idle, Moving, Sprinting, Airborne, Flying) bildirir. Ses tasarımcıları, bu sinyali dinleyerek farklı hareket durumları için uygun ayak sesi, rüzgar sesi veya diğer çevresel ses efektlerini tetikleyebilir.
+
+### 8.2. Mekanik Tetikleyicileri
+`ApplyGrapple()`, `ApplySlide()` gibi mekaniklerin tetiklenmesi, ilgili ses efektlerinin (kanca sesi, kayma sesi) çalınması için kullanılabilir. `PlayerController.gd` içindeki ilgili sinyaller (`jumped`, `slide_started`, `grapple_fired` vb.) ses entegrasyonu için kullanılmalıdır.
+
+## 9. Animator Perspektifi: Animasyon Entegrasyonu
+
+**Sorumluluk Alanı:** Karakter animasyonları, geçişler ve görsel akıcılık.
+
+Sistem, animatörlerin karakter hareketlerini görsel olarak zenginleştirmesi için gerekli bilgileri sağlar.
+
+### 9.1. `StateChanged` Sinyali
+`MovementNode`'dan yayılan `StateChanged` sinyali, karakterin hareket durumundaki değişiklikleri animasyon durum makinelerine (Animation State Machines) doğrudan beslemek için kullanılabilir. Bu, `Idle`'dan `Walk`'a, `Walk`'tan `Sprint`'e veya `Airborne`'a geçiş gibi temel animasyon geçişlerini kolaylaştırır.
+
+### 9.2. Dinamik Hız Bilgisi
+`MovementSystem`'den alınan hız bilgisi, animasyon hızını dinamik olarak ayarlamak için kullanılabilir. Örneğin, karakterin hızı arttıkça yürüme/koşma animasyonunun oynatma hızını artırmak, daha gerçekçi bir hissiyat sağlar.
+
+### 9.3. Kamera Sarsıntısı ve FOV Animasyonları
+Kamera sarsıntısı ve dinamik FOV, animasyonlarla birlikte çalışarak görsel etkiyi artırır. Örneğin, bir patlama animasyonu sırasında kamera sarsıntısı ve hafif bir FOV değişimi, olayın şiddetini vurgular.
+
+## 10. Technical Writer Perspektifi: Dokümantasyon ve Bilgi Paylaşımı
+
+**Sorumluluk Alanı:** Teknik dokümantasyonun oluşturulması, güncellenmesi ve sürdürülmesi.
+
+Bu dokümantasyon, projenin tüm paydaşları için tek ve güvenilir bir bilgi kaynağı olmayı hedefler.
+
+### 10.1. Kapsamlı ve Modüler Yapı
+Dokümantasyon, her uzmanlık alanına özel bölümlerle modüler bir yapıya sahiptir. Bu, ilgili kişilerin sadece kendi alanlarıyla ilgili bilgilere hızlıca ulaşmasını sağlar.
+
+### 10.2. "Tak-Çalıştır" Yaklaşımı
+Her özellik ve bileşen, nasıl entegre edileceği, nasıl kullanılacağı ve nasıl yapılandırılacağı konusunda net talimatlarla açıklanmıştır. Bu, yeni ekip üyelerinin veya farklı projelerin sistemi kolayca benimsemesine olanak tanır.
+
+### 10.3. Sürekli Güncelleme
+Dokümantasyon, projenin evrimiyle birlikte sürekli güncellenmelidir. Yeni özellikler, bug fix'ler veya mimari değişiklikler anında dokümantasyona yansıtılmalıdır.
 
 ---
 
-## 2. Uzman Hareket Mekanikleri
-
-Sistem, `IMovementModifier` arayüzü üzerinden çalışan 10 adet dinamik mekanik içerir.
-
-### 2.1. Temel Mekanikler
-*   **Grapple Hook (Kanca):** Geliştirilmiş fizik tabanlı çekme ve fırlatma sistemi. `anchorPoint` üzerinden yay kuvveti hesaplar ve damping kuvveti çekim kuvvetini tamamen sıfırlamaz, her zaman hedefe yönelim sağlar.
-*   **Slide (Kayma):** Koşma sırasında tetiklenen, düşük sürtünmeli hareket. Slide sırasında yapılan saldırılar hasar bonusu alır.
-*   **Crouch Jump:** Çömelme sırasında şarj edilen ve normalden %150 daha yüksek zıplama sağlayan mekanik.
-
-### 2.2. İleri Seviye Mekanikler
-*   **Wall Jump Combo:** Duvarlardan sekerek zıplama ve her başarılı sekmede ivme kazanma.
-*   **Vaulting:** Belirli bir yükseklikteki engellerin üzerinden otomatik olarak aşma.
-*   **Air Momentum Transfer:** Dash veya patlama sonrası kazanılan ivmenin havada korunması ve zincirlenmesi.
-*   **Time Dilation:** Düşük can durumunda veya özel yetenek tetiklendiğinde zamanı yavaşlatma (Slow-mo).
-
----
-
-## 3. Kamera Sistemi Geliştirmeleri
-
-Kamera sistemi, daha dinamik ve tepkisel bir deneyim sunmak üzere önemli ölçüde geliştirilmiştir.
-
-### 3.1. Gelişmiş Kamera Sarsıntısı (Camera Shake)
-`orbit_camera_mode.gd` içerisinde `FastNoiseLite` tabanlı, organik ve sürekli titreme hissi veren bir sarsıntı sistemi entegre edilmiştir. Farklı oyun içi olaylar için önceden tanımlanmış sarsıntı profilleri mevcuttur:
-
-| Profil Adı | Açıklama | Frekans (Hz) | Pozisyon Genliği (m) | Rotasyon Genliği (derece) | Azalma Hızı |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **LANDING** | Orta genlik, düşük frekans — ağır iniş hissi | 8.0 | 0.06 | 0.8 | 4.5 |
-| **EXPLOSION** | Yüksek genlik, yüksek frekans — patlama sarsıntısı | 20.0 | 0.12 | 1.5 | 6.0 |
-| **JUMP** | Düşük genlik, orta frekans — hafif zıplama titremesi | 12.0 | 0.03 | 0.4 | 7.0 |
-| **IMPACT** | Orta-yüksek genlik, çok yüksek frekans — ani darbe | 30.0 | 0.08 | 1.0 | 8.0 |
-| **CUSTOM** | Dışarıdan tam kontrol edilebilir profil | Değişken | Değişken | Değişken | Değişken |
-
-Sarsıntı, `add_shake(amount, profile)` metodu ile tetiklenir ve `_shake_amount` değeri 0.0 ile 1.0 arasında normalize edilerek mevcut sarsıntıya eklenir. Her profil için ayrı `FastNoiseLite` örnekleri kullanılarak daha çeşitli ve doğal sarsıntı efektleri elde edilir.
-
-### 3.2. Dinamik FOV (Field of View)
-Kamera FOV`u artık karakterin hızına ve durumuna (nişan alma, sprint) göre dinamik olarak ayarlanmaktadır. Öncelik sırası şu şekildedir: Nişan Alma (Aim) > Sprint > Hız Bazlı FOV. Hız bazlı FOV, karakterin hızı arttıkça FOV`u genişletir ve bir ease-in eğrisi ile yumuşak geçişler sağlar.
-
-### 3.3. Kamera Modları ve Geçişler (Kamera Mikseri)
-*   **FirstPersonCameraMode:** `CameraModeBase``den türetilmiş yeni bir birinci şahıs kamera modu eklenmiştir. Bu modda `SpringArm3D``nin uzunluğu sıfırlanır ve kamera doğrudan karakterin göz hizasına (head_offset) yerleştirilir. Daha tepkisel bir `rotation_smooth` değeri kullanır.
-*   **Kamera Mikseri (Blending System):** `CameraController.gd` içerisinde kamera modları arasında geçiş yaparken (örneğin TPS`ten FPS`e veya araçtan inerken) `blend_duration` parametresi ile belirlenen süre boyunca iki modun kamera verileri (FOV, pozisyon, rotasyon) pürüzsüz bir şekilde `lerp` (doğrusal enterpolasyon) edilerek karıştırılır. Bu, ani kamera sıçramalarını önleyerek "AAA" kalitesinde akıcı geçişler sağlar.
-
-### 3.4. Hedef Kilitlenme (Target Lock-on)
-`CameraController.gd``ye düşmanlara kilitlenme mekaniği entegre edilmiştir. `toggle_lock_on()` metodu ile en yakın düşman (belirlenen `lock_on_group` içindeki) hedeflenir ve kamera hedefe doğru yumuşak bir şekilde döner. Kilitlenme sırasında kamera inputları hedefe yönelimi koruyacak şekilde adapte edilir.
-
-### 3.5. SpringArm3D Optimizasyonu
-`SpringArm3D``nin `collision_margin` değeri 0.5`ten 0.1`e düşürülmüş ve `shape` özelliği `SphereShape3D` olarak ayarlanmıştır. Bu optimizasyonlar, dar alanlarda kameranın titremesini ve takılmasını önleyerek daha akıcı bir deneyim sunar.
-
----
-
-## 4. Kritik Bug Çözümleri
-
-Projenin kararlılığını ve oynanabilirliğini artıran önemli hata düzeltmeleri yapılmıştır.
-
-### 4.1. Property 2 (Grapple) - Geliştirilmiş Spring-Damper Fiziği
-`GrappleModifier.cs` içerisindeki spring-damper fiziği güncellenmiştir. Artık damping kuvveti, çekim kuvvetini tamamen sıfırlamak yerine, hızın ip yönündeki bileşenine (radial velocity) uygulanır. Bu sayede, grappling sırasında karakterin hedefe doğru yönelimi her zaman korunur ve daha gerçekçi bir salınım (swing) mekaniği elde edilir. Ayrıca, ipin maksimum uzunluğuna %20`lik bir tolerans eklenerek ani kopmaların önüne geçilmiştir.
-
-### 4.2. Property 12 (Config) - `MovementConfig.cs` Validasyonu
-`MovementConfig.cs` içerisindeki `[Export]` değerlerine C# tarafında `Mathf.Clamp` ve `Mathf.Max` ile validasyon eklenmiştir. Bu sayede, Godot editöründen veya kod üzerinden geçersiz (negatif hız, sıfır ivme vb.) değerlerin sisteme girmesi engellenerek, hareket sisteminin beklenmedik davranışlar sergilemesinin önüne geçilmiştir. Örneğin, hız değerleri için minimum 0.1f, ivme ve sürtünme değerleri için minimum 0.0f, `AirControlMultiplier` için 0.0f ile 2.0f arası ve `MaxJumps` için minimum 0 gibi kısıtlamalar getirilmiştir.
-
----
-
-## 5. Mimari İyileştirmeler ve Yeni Özellikler
-
-### 5.1. Data-Driven "Feel" Presetleri
-`MovementConfig` sınıfı artık sadece bir ayar dosyası olmaktan çıkıp, farklı karakter tipleri veya oyun durumları için önceden tanımlanmış "feel" presetlerini destekleyen bir kütüphane haline gelmiştir. `addons/virabis_movement/presets/` dizini altında `ninja_preset.tres`, `tank_preset.tres` ve `god_preset.tres` gibi örnek presetler oluşturulmuştur. Bu presetler, `MovementNode` üzerindeki `Config` slotuna atanarak karakterin tüm hareket parametrelerini tek bir dosya değişikliği ile anında değiştirmeye olanak tanır. Bu yaklaşım, geliştiricilere "uzay gemisi inşa etmeden" projenin hissini kolayca ayarlama ve deneme esnekliği sunar.
-
-### 5.2. "Sudo" Yetkili Movement Decorator
-`IMovementSystem` arayüzü tanıtılarak, `MovementSystem` sınıfı bu arayüzü uygulayacak şekilde güncellenmiştir. `SudoMovementDecorator.cs` adında yeni bir sınıf, `IMovementSystem` arayüzünü uygulayarak mevcut hareket sistemini sarmalar. Bu decorator, ana hareket koduna `if (is_admin)` gibi kontroller eklemek yerine, GodMode, InfiniteJumps, NoClip ve SpeedMultiplier gibi "sudo" yetkilerini modüler bir şekilde yönetir. `MovementNode.cs` artık `IMovementSystem` üzerinden çalışır ve `SudoMovementDecorator`'ı varsayılan olarak kullanır. Bu sayede, admin yetkileri ana hareket mantığından ayrılmış, kod daha temiz ve yönetilebilir hale gelmiştir.
-
----
-
-## 6. Debug ve İzleme Sistemi
-
-Sistem, geliştirme sürecini kolaylaştırmak için kapsamlı bir debug altyapısı sunar.
-
-### 6.1. Görsel Debug Paneli
-`debug_panel.gd` aracılığıyla ekranda canlı olarak izlenebilen veriler:
-*   **Current State:** `Idle`, `Moving`, `Sprinting`, `Airborne`, `Flying`.
-*   **Active Modifiers:** O an çalışan tüm mekaniklerin listesi ve iç değişkenleri.
-*   **Jump Buffer:** Kalan zıplama hakları ve Coyote Time durumu.
-
-### 6.2. Hata Ayıklama (Debugging)
-*   **C# Tarafı:** `GD.Print()` ile konsol çıktıları ve VS Code üzerinden .NET Debugger desteği.
-*   **GDScript Tarafı:** `print_rich()` ile renkli konsol logları ve yerleşik breakpoint desteği.
-
----
-
-### 7. Kurulum ve Entegrasyon
+## Kurulum ve Entegrasyon (Tüm Uzmanlar İçin)
 
 1.  `addons/virabis_movement` klasörünü projenize kopyalayın.
 2.  **Project Settings > Plugins** sekmesinden eklentiyi aktif edin.
 3.  Karakterinize `MovementNode` ekleyin ve `Character` referansını bağlayın.
 4.  `MovementNode` üzerindeki `Config` slotuna yeni bir `MovementConfig` Resource oluşturup atayın veya hazır presetlerden (`ninja_preset.tres`, `tank_preset.tres`, `god_preset.tres`) birini seçerek parametreleri ayarlayın.
 5.  `PlayerController.gd` üzerinden girdi (input) yönlendirmelerini yapın.
-6.  **Emre (Optimizasyon Gurusu & Minimalist Yaşam Koçu)** ve **Zeynep (QA/Test Uzmanı & Dedektif)**`in önerileri doğrultusunda, `player_controller.gd` içindeki `_check_landing` fonksiyonu `MovementNode``un `StateChanged` sinyali ile tetiklenecek şekilde optimize edilmiştir. Ayrıca `_handle_crouch` fonksiyonu kaldırılmış, `_crouch_charge` yönetimi `_physics_process` içine taşınarak daha event-driven bir yapıya geçilmiştir.
 
 ---
 
-## 8. Referanslar ve Kaynaklar
+## Referanslar ve Kaynaklar
 *   [Godot 4.6 .NET Documentation][1]
 *   [Virabis Movement Core API Reference][2]
 
