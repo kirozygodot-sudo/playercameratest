@@ -1,0 +1,10 @@
+63f7b34db8d8cdea90c76aacccf841ec
+::res://::1772106011
+camera_controller.gd::GDScript::1970007196464393395::1772101829::0::1::::CameraController<>Node3D<><>0<>0<><>::
+camera_mode_base.gd::GDScript::2891527373756297127::1772097296::0::1::::CameraModeBase<>RefCounted<><>0<>0<><>::
+debug_panel.gd::GDScript::3402197063394507403::1772101977::0::1::::DebugPanel<>Control<><>0<>0<><>::
+main.tscn::PackedScene::209998081263685520::1772106011::0::1::::<><><>0<>0<><>::res://player_controller.gd<>res://camera_controller.gd<>res://debug_panel.gd
+orbit_camera_mode.gd::GDScript::1331001714003707847::1772101960::0::1::::OrbitCameraMode<>CameraModeBase<><>0<>0<><>::
+player_controller.gd::GDScript::3988777324306488950::1772106201::0::1::::PlayerController<>Node<><>0<>0<><>::
+schema.json::JSON::-1::1771396932::0::1::::<><><>0<>0<><>::
+vehicle_camera_mode.gd::GDScript::3564946294587479881::1772097296::0::1::::VehicleCameraMode<>CameraModeBase<><>0<>0<><>::

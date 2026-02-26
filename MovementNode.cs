@@ -6,15 +6,9 @@ using Virabis.Movement.Core.Modifiers;
 namespace Virabis.Movement.Bridge;
 
 /// <summary>
-/// Godot ↔ Core adapter.
-///
-/// KURAL: Kamerayı bilmez. Input okumaz.
-/// PlayerController.gd → SetInputDirection() + SetSprinting() + RequestJump() çağırır.
-/// AI da aynı üç metodu çağırarak aynı physics'i kullanır.
-///
-/// Gravity: _Ready'de init edilir (field init'te Godot project settings
-/// henüz yüklü olmayabilir — toplantı kararı).
+/// Godot ↔ Core adapter. GDScript'ten erişilebilir.
 /// </summary>
+[GlobalClass]
 public partial class MovementNode : Node
 {
     [Export] public CharacterBody3D Character    { get; set; } = null!;

@@ -1,0 +1,73 @@
+[gd_scene load_steps=7 format=3 uid="uid://c8yvxg3ulq3a"]
+
+[ext_resource type="Script" path="res://player_controller.gd" id="1_8y3gx"]
+[ext_resource type="Script" path="res://camera_controller.gd" id="2_cam"]
+[ext_resource type="Script" path="res://debug_panel.gd" id="3_debug"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_1"]
+size = Vector3(50, 1, 50)
+
+[sub_resource type="BoxMesh" id="BoxMesh_1"]
+size = Vector3(50, 1, 50)
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_1"]
+
+[node name="Main" type="Node3D"]
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="Ground" type="StaticBody3D" parent="World"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Ground"]
+shape = SubResource("BoxShape3D_1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Ground"]
+mesh = SubResource("BoxMesh_1")
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("CapsuleShape3D_1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Player"]
+mesh = SubResource("CapsuleMesh_1")
+
+[node name="MovementNode" type="Node" parent="Player"]
+
+[node name="CameraRig" type="Node3D" parent="Player"]
+script = ExtResource("2_cam")
+
+[node name="YawPivot" type="Node3D" parent="Player/CameraRig"]
+
+[node name="PitchPivot" type="Node3D" parent="Player/CameraRig/YawPivot"]
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Player/CameraRig/YawPivot/PitchPivot"]
+spring_length = 4.0
+collision_mask = 1
+
+[node name="Camera3D" type="Camera3D" parent="Player/CameraRig/YawPivot/PitchPivot/SpringArm3D"]
+
+[node name="PlayerController" type="Node" parent="Player"]
+script = ExtResource("1_8y3gx")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75, 0.433013, 10, 10, 10)
+shadow_enabled = true
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="DebugPanel" type="Label" parent="CanvasLayer"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -250.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 200.0
+grow_horizontal = 0
+text = "Debug Info"
+script = ExtResource("3_debug")

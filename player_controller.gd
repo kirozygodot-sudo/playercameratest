@@ -28,8 +28,9 @@ enum SprintMode { HOLD, TOGGLE, DOUBLE_TAP }
 var _sprint_toggle_state := false
 var _last_forward_time := 0.0
 
-@onready var movement : MovementNode    = $"../MovementNode"
-@onready var camera   : CameraController = $"../CameraRig"
+@onready var movement : Node = $"../MovementNode"
+@onready var camera   : Node = $"../CameraRig"
+@onready var _character : CharacterBody3D = get_parent()
 
 signal jumped
 signal landed
@@ -43,7 +44,7 @@ signal momentum_transferred
 
 func _process(delta: float) -> void:
 	var is_sprinting := _get_sprint_input(delta)
-	movement.SetSprinting(is_sprinting)
+	movement.call("SetSprinting", is_sprinting)
 	
 	# Sprint FOV Kick için kameraya bildir
 	if camera._active_mode is OrbitCameraMode:
@@ -51,7 +52,7 @@ func _process(delta: float) -> void:
 
 	# Uçuş toggle — geliştirme test tuşu. İleride ability sistemi tetikler.
 	if Input.is_action_just_pressed("toggle_fly"):
-		movement.SetFlying(!movement.IsFlying())
+		movement.call("SetFlying", !movement.call("IsFlying"))
 
 
 func _get_sprint_input(delta: float) -> bool:
@@ -89,7 +90,7 @@ func _physics_process(_delta: float) -> void:
 var _was_on_floor := true
 
 func _check_landing() -> void:
-	var is_on_floor := movement.Character.is_on_floor()
+	var is_on_floor : bool = _character.is_on_floor()
 	if not _was_on_floor and is_on_floor:
 		# Yere iniş titremesi
 		if camera._active_mode is OrbitCameraMode:
@@ -109,32 +110,32 @@ func _update_movement_direction() -> void:
 	)
 
 	if raw.length_squared() < input_dead_zone * input_dead_zone:
-		movement.SetInputDirection(Vector3.ZERO)
+		movement.call("SetInputDirection", Vector3.ZERO)
 		return
 
-	var forward := camera.get_forward()
-	var right   := camera.get_right()
+	var forward : Vector3 = camera.get_forward()
+	var right   : Vector3 = camera.get_right()
 	forward.y    = 0.0
 	right.y      = 0.0
 
-	var dir := forward * -raw.y + right * raw.x
+	var dir : Vector3 = forward * -raw.y + right * raw.x
 	if dir.length_squared() > 0.0001:
 		dir = dir.normalized()
 
-	movement.SetInputDirection(dir)
+	movement.call("SetInputDirection", dir)
 
 
 func _handle_jump() -> void:
 	if Input.is_action_just_pressed("jump"):
-		movement.RequestJump()
+		movement.call("RequestJump")
 		jumped.emit()
 		# Zıplama titremesi
 		if camera._active_mode is OrbitCameraMode:
 			(camera._active_mode as OrbitCameraMode).add_shake(0.08)
 	
 	# Ground Slam - Ctrl tuşu ile hızlı düşüş
-	if Input.is_action_just_pressed("crouch") and not movement.Character.is_on_floor():
-		movement.RequestGroundSlam()
+	if Input.is_action_just_pressed("crouch") and not _character.is_on_floor():
+		movement.call("RequestGroundSlam")
 		# Ground Slam titremesi
 		if camera._active_mode is OrbitCameraMode:
 			(camera._active_mode as OrbitCameraMode).add_shake(0.05)
@@ -153,7 +154,7 @@ func _handle_slide() -> void:
 		_is_sliding = true
 		_slide_timer = 2.0  # Max slide süresi
 		slide_started.emit()
-		movement.ApplySlide(3.0, 2.0, 0.6, 2.0, 1.5)
+		movement.call("ApplySlide", 3.0, 2.0, 0.6, 2.0, 1.5)
 		
 		# Slide kamera shake
 		if camera._active_mode is OrbitCameraMode:
@@ -205,14 +206,14 @@ func _handle_wall_jump() -> void:
 		return
 	
 	# Wall detection ve jump (SpaceRay kullanarak duvar algılama)
-	if Input.is_action_just_pressed("jump") and not movement.Character.is_on_floor():
-		var space_state := movement.Character.get_world_3d().direct_space_state
+	if Input.is_action_just_pressed("jump") and not _character.is_on_floor():
+		var space_state : PhysicsDirectSpaceState3D = _character.get_world_3d().direct_space_state
 		var query := PhysicsRayQueryParameters3D.new()
-		query.from = movement.Character.global_position
-		query.to = movement.Character.global_position + movement.Character.velocity.normalized() * 1.5
-		query.exclude = [movement.Character]
+		query.from = _character.global_position
+		query.to = _character.global_position + _character.velocity.normalized() * 1.5
+		query.exclude = [_character]
 		
-		var result := space_state.intersect_ray(query)
+		var result : Dictionary = space_state.intersect_ray(query)
 		if result:
 			_wall_jump_cooldown = 0.3
 			momentum_transferred.emit()
@@ -230,13 +231,13 @@ var _grapple_active := false
 func _update_grapple() -> void:
 	# Grapple fire
 	if Input.is_action_just_pressed("grapple") and not _grapple_active:
-		var space_state := movement.Character.get_world_3d().direct_space_state
+		var space_state : PhysicsDirectSpaceState3D = _character.get_world_3d().direct_space_state
 		var query := PhysicsRayQueryParameters3D.new()
 		query.from = camera.global_position
-		query.to = camera.global_position + camera.get_forward() * 30.0
-		query.exclude = [movement.Character]
+		query.to = camera.global_position + camera.call("get_forward") * 30.0
+		query.exclude = [_character]
 		
-		var result := space_state.intersect_ray(query)
+		var result : Dictionary = space_state.intersect_ray(query)
 		if result:
 			_grapple_active = true
 			grapple_fired.emit()
@@ -259,16 +260,16 @@ func _update_grapple() -> void:
 
 ## Araca / ata / ejderhaya bin.
 ## cam_mode: VehicleCameraMode, DragonCameraMode vb. — dışarıdan oluştur.
-func mount(mount_node: Node3D, cam_mode: CameraModeBase) -> void:
-	movement.SetEnabled(false)
-	camera.switch_mode(cam_mode)
+func mount(mount_node: Node3D, cam_mode) -> void:
+	movement.call("SetEnabled", false)
+	camera.call("switch_mode", cam_mode)
 	# mount_node.take_control(self)  — mount sistemi implemente edilince açılır
 
 
 ## Mount'tan in, orbit kameraya geri dön.
 func dismount() -> void:
-	movement.SetEnabled(true)
-	camera.switch_mode(OrbitCameraMode.new())
+	movement.call("SetEnabled", true)
+	camera.call("switch_mode", null)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -276,6 +277,6 @@ func dismount() -> void:
 # ─────────────────────────────────────────────────────────────────────────────
 
 func get_debug_info() -> Dictionary:
-	var info := movement.GetDebugInfo()
-	info.merge(camera.get_debug_info())
+	var info : Dictionary = movement.call("GetDebugInfo")
+	info.merge(camera.call("get_debug_info"))
 	return info

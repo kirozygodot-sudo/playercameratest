@@ -1,0 +1,12 @@
+<Project Sdk="Godot.NET.Sdk/4.2.2">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>Virabis.Movement</RootNamespace>
+    <AssemblyName>PlayerCameraTest</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="MovementSystemTests.cs" />
+    <Compile Remove="MovementBridge.cs" />
+  </ItemGroup>
+</Project>
