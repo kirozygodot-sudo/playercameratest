@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="MovementConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/virabis_movement/core/MovementConfig.cs" id="1_tank"]
+
+[resource]
+script = ExtResource("1_tank")
+WalkSpeed = 4.0
+SprintSpeed = 6.0
+FlyingSpeed = 4.0
+GroundAcceleration = 10.0
+GroundFriction = 12.0
+AirAcceleration = 5.0
+AirFriction = 5.0
+AirControlMultiplier = 0.4
+TurnResponsiveness = 2.5
+SprintTurnMultiplier = 0.4
+MaxJumps = 0
+MaxSpeedCap = 12.0
+MaxModifiers = 5

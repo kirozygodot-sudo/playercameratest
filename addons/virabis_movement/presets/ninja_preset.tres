@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="MovementConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/virabis_movement/core/MovementConfig.cs" id="1_ninja"]
+
+[resource]
+script = ExtResource("1_ninja")
+WalkSpeed = 8.0
+SprintSpeed = 14.0
+FlyingSpeed = 12.0
+GroundAcceleration = 40.0
+GroundFriction = 25.0
+AirAcceleration = 25.0
+AirFriction = 1.0
+AirControlMultiplier = 1.2
+TurnResponsiveness = 0.8
+SprintTurnMultiplier = 0.9
+MaxJumps = 2
+MaxSpeedCap = 30.0
+MaxModifiers = 12

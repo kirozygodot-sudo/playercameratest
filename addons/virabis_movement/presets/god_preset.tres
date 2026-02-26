@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="MovementConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/virabis_movement/core/MovementConfig.cs" id="1_god"]
+
+[resource]
+script = ExtResource("1_god")
+WalkSpeed = 20.0
+SprintSpeed = 50.0
+FlyingSpeed = 40.0
+GroundAcceleration = 100.0
+GroundFriction = 50.0
+AirAcceleration = 100.0
+AirFriction = 0.0
+AirControlMultiplier = 2.0
+TurnResponsiveness = 0.1
+SprintTurnMultiplier = 1.0
+MaxJumps = 999
+MaxSpeedCap = 200.0
+MaxModifiers = 32
