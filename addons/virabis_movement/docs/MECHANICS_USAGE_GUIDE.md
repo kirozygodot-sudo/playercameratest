@@ -5,7 +5,7 @@ Bu rehber, sistemdeki 10 gelişmiş hareket mekaniğinin her biri için teknik d
 ---
 
 ## 1. Grapple Hook (Kanca Atma)
-Karakteri bir noktaya doğru fiziksel olarak çeker ve bırakıldığında ivme kazandırır.
+Karakteri bir noktaya doğru fiziksel olarak çeker ve bırakıldığında ivme kazandırır. **GÜNCELLEME:** Geliştirilmiş spring-damper fiziği sayesinde, damping kuvveti çekim kuvvetini tamamen sıfırlamaz, her zaman hedefe yönelim sağlar. Bu, daha gerçekçi ve kontrol edilebilir bir salınım (swing) mekaniği sunar.
 *   **Tetikleme:** `ApplyGrapple(anchor_point)`
 *   **Bırakma:** `ReleaseGrapple()`
 
@@ -136,7 +136,7 @@ if Input.is_action_just_pressed("jump") and was_dashing:
 ---
 
 ## Önemli Notlar
-1.  **MovementConfig (Resource):** **Arda (Godot Core Uzmanı & Muhasebeci)** ve **Elif (Gameplay Programcısı & Bahçıvan)**'ın önerileri doğrultusunda, karakterin temel hareket parametreleri (`WalkSpeed`, `SprintSpeed`, `MaxJumps` vb.) artık Godot `Resource` olarak tanımlanan `MovementConfig` üzerinden yönetilmektedir. Bu `Resource`'u `MovementNode`'un Inspector panelindeki `Config` slotuna atayarak tüm temel hareket parametrelerini Godot editöründen kolayca ayarlayabilirsiniz.
-2.  **Mekanik Parametreleri:** Her bir uzman mekaniğin kendine özgü parametreleri (örneğin `ApplyGrapple`'daki `springStrength` veya `ApplySlide`'daki `friction`) hala GDScript'ten `call()` metodu ile doğrudan `MovementNode`'a iletilir. Bu, her mekaniğin anlık duruma göre dinamik olarak ayarlanabilmesini sağlar.
+1.  **MovementConfig (Resource):** **Arda (Godot Core Uzmanı & Muhasebeci)** ve **Elif (Gameplay Programcısı & Bahçıvan)**`ın önerileri doğrultusunda, karakterin temel hareket parametreleri (`WalkSpeed`, `SprintSpeed`, `MaxJumps` vb.) artık Godot `Resource` olarak tanımlanan `MovementConfig` üzerinden yönetilmektedir. Bu `Resource``u `MovementNode``un Inspector panelindeki `Config` slotuna atayarak tüm temel hareket parametrelerini Godot editöründen kolayca ayarlayabilirsiniz. **GÜNCELLEME:** `MovementConfig.cs` içerisindeki `[Export]` değerlerine C# tarafında `Mathf.Clamp` ve `Mathf.Max` ile validasyon eklenerek geçersiz değerlerin sisteme girmesi engellenmiştir.
+2.  **Mekanik Parametreleri:** Her bir uzman mekaniğin kendine özgü parametreleri (örneğin `ApplyGrapple``daki `springStrength` veya `ApplySlide``daki `friction`) hala GDScript`ten `call()` metodu ile doğrudan `MovementNode``a iletilir. Bu, her mekaniğin anlık duruma göre dinamik olarak ayarlanabilmesini sağlar.
 3.  **Sinyaller:** Mekanikler tetiklendiğinde `PlayerController.gd` içindeki ilgili sinyalleri (`jumped`, `slide_started`, `grapple_fired` vb.) `emit` etmeyi unutmayın. Bu, animasyon ve ses sistemleri için gereklidir.
-4.  **C# Erişimi:** Tüm bu metodlar `MovementNode.cs` içinde tanımlıdır ve GDScript'ten `call()` metodu ile güvenli bir şekilde çağrılabilir.
+4.  **C# Erişimi:** Tüm bu metodlar `MovementNode.cs` içinde tanımlıdır ve GDScript`ten `call()` metodu ile güvenli bir şekilde çağrılabilir.
