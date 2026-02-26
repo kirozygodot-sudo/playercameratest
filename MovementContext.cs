@@ -40,4 +40,7 @@ public readonly record struct MovementContext
 
     /// <summary>Sadece horizontal bileşen (Y = 0). Bridge vertical'ı ayrı yönetir.</summary>
     public Vector3 CurrentVelocity { get; init; }
+    
+    /// <summary>Oyuncu pozisyonu. Grapple, WallJump gibi mekanikler için gerekli.</summary>
+    public Vector3 CurrentPosition { get; init; }
 }

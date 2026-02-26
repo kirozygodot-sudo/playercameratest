@@ -15,6 +15,10 @@
 class_name CameraController
 extends Node3D
 
+## SpringArm çarpışma katmanı ayarları
+@export var collision_layer_mask : int = 1  # Varsayılan: layer 1 (world/terrain)
+@export var collision_margin : float = 0.5   # Çarpışma mesafe payı
+
 var _active_mode : CameraModeBase = null
 
 signal mode_changed(mode_name: String)
@@ -25,6 +29,12 @@ func _ready() -> void:
 	set_as_top_level(true)  # Player rotation'ından bağımsız döner
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	switch_mode(OrbitCameraMode.new())
+	
+	# SpringArm çarpışma katmanı ayarları
+	var spring_arm := get_node_or_null("YawPivot/PitchPivot/SpringArm3D")
+	if spring_arm:
+		spring_arm.collision_mask = collision_layer_mask
+		spring_arm.margin = collision_margin
 
 
 func _process(delta: float) -> void:

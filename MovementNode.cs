@@ -20,6 +20,9 @@ public partial class MovementNode : Node
     [Export] public CharacterBody3D Character    { get; set; } = null!;
     [Export] public float           JumpForce    { get; set; } = 5.5f;
     [Export] public float           GravityScale { get; set; } = 1.0f;
+    [Export] public float           CoyoteTime   { get; set; } = 0.1f;
+    [Export] public float           JumpBuffer   { get; set; } = 0.1f;
+    [Export] public float           GroundSlamGravity { get; set; } = 3.0f;  // Ground slam çarpan
 
     // ── Core ──────────────────────────────────────────────────────────────────
     private MovementSystem _system = null!;
@@ -27,6 +30,14 @@ public partial class MovementNode : Node
     // ── Vertical (Bridge yönetir, Core bilmez) ───────────────────────────────
     private float _verticalVelocity;
     private float _gravity;   // _Ready'de set edilir
+
+    // ── Coyote Time & Jump Buffer ────────────────────────────────────────────
+    private float _coyoteTimer;
+    private float _jumpBufferTimer;
+    private bool  _wasOnFloor;
+
+    // ── Ground Slam ───────────────────────────────────────────────────────────
+    private bool _groundSlamRequested;
 
     // ── Input (PlayerController veya AI set eder) ────────────────────────────
     private Godot.Vector3 _inputDir;
@@ -55,16 +66,44 @@ public partial class MovementNode : Node
 
         float dt = (float)delta;
 
+        // Coyote Time: yerde olmadan önceki kısa sürede zıplama izni
+        bool isOnFloor = Character.IsOnFloor();
+        if (isOnFloor)
+        {
+            _coyoteTimer = CoyoteTime;
+            _wasOnFloor = true;
+        }
+        else if (_wasOnFloor)
+        {
+            _coyoteTimer -= dt;
+            if (_coyoteTimer <= 0f) _wasOnFloor = false;
+        }
+
+        // Jump Buffer: zıplama tuşuna basıldığında kısa süre bekle
+        if (_jumpThisFrame)
+        {
+            _jumpBufferTimer = JumpBuffer;
+            _jumpThisFrame = false;
+        }
+        else if (_jumpBufferTimer > 0f)
+        {
+            _jumpBufferTimer -= dt;
+        }
+
         ApplyVertical(dt);
+
+        // Coyote time aktifse veya yerdeyse zıplama mümkün
+        bool canJump = isOnFloor || _coyoteTimer > 0f;
+        bool jumpRequested = _jumpBufferTimer > 0f && canJump;
 
         var ctx = new MovementContext
         {
             InputDirection  = new System.Numerics.Vector3(_inputDir.X, 0f, _inputDir.Z),
             CurrentVelocity = new System.Numerics.Vector3(Character.Velocity.X, 0f, Character.Velocity.Z),
-            IsOnFloor       = Character.IsOnFloor(),
+            IsOnFloor       = isOnFloor,
             IsSprinting     = _sprinting,
             IsFlying        = _flying,
-            JumpRequested   = _jumpThisFrame,
+            JumpRequested   = jumpRequested,
             JumpsRemaining  = _system.JumpsRemaining,
             DeltaTime       = dt
         };
@@ -72,7 +111,11 @@ public partial class MovementNode : Node
         var result = _system.Update(ctx);
 
         if (result.JumpConsumed)
+        {
             _verticalVelocity = JumpForce;
+            _jumpBufferTimer = 0f;  // Buffer'ı temizle
+            _coyoteTimer = 0f;      // Coyote time'ı temizle
+        }
 
         if (result.DisableGravity)
             _verticalVelocity = 0f;
@@ -83,8 +126,6 @@ public partial class MovementNode : Node
             result.NewVelocity.Z
         );
         Character.MoveAndSlide();
-
-        _jumpThisFrame = false;  // single-frame flag reset
 
         if (result.State != _lastState)
         {
@@ -105,6 +146,9 @@ public partial class MovementNode : Node
 
     /// <summary>Single-frame jump. PlayerController input algılayınca çağırır.</summary>
     public void RequestJump() => _jumpThisFrame = true;
+
+    /// <summary>Ground Slam - hızlı yere iniş. PlayerController input algılayınca çağırır.</summary>
+    public void RequestGroundSlam() => _groundSlamRequested = true;
 
     public bool IsFlying() => _flying;
 
@@ -145,6 +189,66 @@ public partial class MovementNode : Node
     public void ApplySpeedBoost(float multiplier, float duration)
         => _system.AddModifier(new SpeedBoostModifier(multiplier, duration));
 
+    // ── ADVANCED MECHANICS API ────────────────────────────────────────────────
+    // 10 yeni uzman mekanik için API'ler
+
+    /// <summary>Momentum Vaulting - yüksek hızla engel aşma</summary>
+    public void ApplyVault(float minSpeed, float maxHeight, float duration, float boost = 1.2f)
+        => _system.AddModifier(new VaultModifier(minSpeed, maxHeight, duration, boost));
+
+    /// <summary>Slide Melee Combo - kayma + saldırı</summary>
+    public void ApplySlide(float friction = 3f, float maxDuration = 2f, float exitMomentum = 0.6f,
+        float attackDamageMult = 2f, float attackSpeedBoost = 1.5f)
+        => _system.AddModifier(new SlideModifier(friction, maxDuration, exitMomentum, 
+            attackDamageMult, attackSpeedBoost));
+
+    /// <summary>Grapple Hook - ip fizikçisi</summary>
+    public void ApplyGrapple(float springStrength = 150f, float damping = 8f, 
+        float maxLength = 30f, float minLength = 2f, float pullSpeed = 15f, float launchBoost = 1.5f)
+        => _system.AddModifier(new GrappleModifier(springStrength, damping, maxLength, 
+            minLength, pullSpeed, launchBoost));
+
+    /// <summary>Time Dilation - low health slow-mo</summary>
+    public void ApplyTimeDilation(float healthThreshold = 0.25f, float slowScale = 0.5f, 
+        float duration = 2f, float cooldown = 30f)
+        => _system.AddModifier(new TimeDilationModifier(healthThreshold, slowScale, duration, cooldown));
+
+    /// <summary>Recoil Propulsion - silah itkisi</summary>
+    public void ApplyRecoil(float knockbackForce = 8f, float airControlImmunity = 0.1f, 
+        float verticalBias = 0.3f, float decay = 5f)
+        => _system.AddModifier(new RecoilModifier(knockbackForce, airControlImmunity, 
+            verticalBias, decay));
+
+    /// <summary>Wall Jump Combo - duvar zıplama + chain</summary>
+    public void ApplyWallJump(float bounceForce = 12f, float maxWallAngle = 30f, 
+        float airControlBonus = 1.5f, int comboResetCount = 3, float comboWindow = 1.5f)
+        => _system.AddModifier(new WallJumpModifier(bounceForce, maxWallAngle, airControlBonus, 
+            comboResetCount, comboWindow));
+
+    /// <summary>Crouch Jump - %150 zıplama</summary>
+    public void ApplyCrouchJump(float heightMultiplier = 1.5f, float timingWindow = 0.1f, 
+        float chargeTime = 0.3f, float minChargePercent = 0.3f)
+        => _system.AddModifier(new CrouchJumpModifier(heightMultiplier, timingWindow, 
+            chargeTime, minChargePercent));
+
+    /// <summary>Explosion Boost - patlama itki</summary>
+    public void ApplyExplosionBoost(float radius = 5f, float maxForce = 20f, 
+        float airControlImmunity = 0.3f, float damageThreshold = 10f)
+        => _system.AddModifier(new ExplosionBoostModifier(radius, maxForce, 
+            airControlImmunity, damageThreshold));
+
+    /// <summary>ADS Glide - nişan kayması</summary>
+    public void ApplyADSGlide(float friction = 2f, float momentumRetention = 0.9f, 
+        float minSpeed = 6f, float maxDuration = 1.5f, float aimSensitivityMult = 0.6f)
+        => _system.AddModifier(new ADSGlideModifier(friction, momentumRetention, minSpeed, 
+            maxDuration, aimSensitivityMult));
+
+    /// <summary>Air Momentum Transfer - dash→jump combo</summary>
+    public void ApplyAirMomentumTransfer(float momentumRetention = 0.85f, float chainMultiplier = 1.2f, 
+        float transferWindow = 0.25f, int maxChainCount = 3)
+        => _system.AddModifier(new AirMomentumTransferModifier(momentumRetention, chainMultiplier, 
+            transferWindow, maxChainCount));
+
     public void ClearAllModifiers() => _system.ClearModifiers();
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -181,7 +285,16 @@ public partial class MovementNode : Node
     {
         if (_flying)  { _verticalVelocity = 0f; return; }
 
-        if (!Character.IsOnFloor())
+        // Ground Slam: hızlı düşüş
+        if (_groundSlamRequested && !Character.IsOnFloor())
+        {
+            _verticalVelocity -= _gravity * GroundSlamGravity * dt;
+            if (Character.IsOnFloor())
+            {
+                _groundSlamRequested = false;  // Yere değince bitir
+            }
+        }
+        else if (!Character.IsOnFloor())
             _verticalVelocity -= _gravity * GravityScale * dt;
         else if (_verticalVelocity < 0f)
             _verticalVelocity = 0f;
