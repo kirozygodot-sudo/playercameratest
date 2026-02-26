@@ -1,33 +1,18 @@
 using System;
 using System.Numerics;
 using System.Collections.Generic;
+using System.Linq;
 using Virabis.Movement.Core.Modifiers;
 
 namespace Virabis.Movement.Core;
 
-/// <summary>
-/// Movement Core — Pure C#. Godot yok. Gravity yok. Node yok.
-///
-/// Pipeline (her frame, bu sırayla):
-///   1. State belirle
-///   2. Hedef hız hesapla
-///   3. Acceleration uygula
-///   4. Turn penalty uygula  (Max Payne hissi)
-///   5. Friction uygula
-///   6. Jump consume
-///   7. Modifier pipeline   (expired temizle → uygula)
-///   8. Max speed clamp
-///   9. Sonuç döndür
-/// </summary>
-public sealed class MovementSystem
+public sealed class MovementSystem : IMovementSystem
 {
     private MovementConfig                  _config;
     private readonly List<IMovementModifier> _modifiers = new(8);
 
     public MovementState CurrentState   { get; private set; } = MovementState.Idle;
     public int           JumpsRemaining { get; private set; }
-
-    // ─────────────────────────────────────────────────────────────────────────
 
     public MovementSystem(MovementConfig config)
     {
@@ -38,18 +23,12 @@ public sealed class MovementSystem
     public void           SetConfig(MovementConfig cfg)
     {
         _config = cfg;
-        // JumpsRemaining korunur ama negatife düşmez
         JumpsRemaining = Math.Max(JumpsRemaining, 0);
     }
     public MovementConfig GetConfig() => _config;
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // ANA UPDATE
-    // ─────────────────────────────────────────────────────────────────────────
-
     public MovementResult Update(MovementContext ctx)
     {
-        // Yere değince jump hakkını resetle
         if (ctx.IsOnFloor)
             JumpsRemaining = _config.MaxJumps;
 
@@ -64,7 +43,6 @@ public sealed class MovementSystem
         {
             JumpsRemaining--;
             jumpConsumed = true;
-            // Yatay velocity korunur — vertical (jump force) Bridge ekler
         }
 
         velocity = ApplyModifierPipeline(velocity, ctx);
@@ -79,11 +57,6 @@ public sealed class MovementSystem
         };
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // MODIFIER API
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /// <summary>False döndürürse MaxModifiers dolmuştur.</summary>
     public bool AddModifier(IMovementModifier modifier)
     {
         if (_modifiers.Count >= _config.MaxModifiers) return false;
@@ -96,7 +69,6 @@ public sealed class MovementSystem
     public bool HasModifier<T>() where T : IMovementModifier
         => _modifiers.Exists(m => m is T);
 
-    /// <summary>Debug overlay için aktif modifier etiketleri.</summary>
     public IReadOnlyList<string> GetModifierLabels()
     {
         var labels = new List<string>(_modifiers.Count);
@@ -105,10 +77,6 @@ public sealed class MovementSystem
     }
 
     public IReadOnlyList<IMovementModifier> GetModifiers() => _modifiers;
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // PRIVATE — Pipeline adımları (her biri tek sorumluluk)
-    // ─────────────────────────────────────────────────────────────────────────
 
     private MovementState DetermineState(MovementContext ctx)
     {
@@ -150,10 +118,6 @@ public sealed class MovementSystem
             : _config.AirAcceleration * _config.AirControlMultiplier;
     }
 
-    /// <summary>
-    /// Ani 180° dönüşte acceleration azaltır — Max Payne "direction commitment" hissi.
-    /// Sprint'te ek ceza (risk-reward).
-    /// </summary>
     private float ApplyTurnPenalty(float accel, Vector3 current, Vector3 inputDir, MovementState state)
     {
         if (current.LengthSquared() < 0.01f) return accel;
@@ -187,7 +151,6 @@ public sealed class MovementSystem
             : velocity;
     }
 
-    // Godot move_toward'ın C# karşılığı
     private static Vector3 MoveToward(Vector3 from, Vector3 to, float delta)
     {
         var   diff = to - from;
