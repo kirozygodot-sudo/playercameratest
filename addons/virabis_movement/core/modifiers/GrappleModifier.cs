@@ -2,27 +2,28 @@ using System.Numerics;
 
 namespace Virabis.Movement.Core.Modifiers;
 
-// ── GRAPPLE HOOK (Gerçek İp Fiziği) ─────────────────────────────────────────
+// ── GRAPPLE HOOK (Geliştirilmiş Spring-Damper Fiziği) ────────────────────────
 /// <summary>
-/// Just Cause 2 tarzı grapple hook. Yaylanma, momentum korunumu, fırlatma.
+/// Just Cause tarzı grapple hook. 
+/// GÜNCELLEME: Damping kuvveti çekim kuvvetini sıfırlamaz, her zaman hedefe yönelim sağlar.
 /// </summary>
 public sealed class GrappleModifier : IMovementModifier
 {
     // Fizik parametreleri
     private readonly float _springStrength;       // Yay sabiti (k)
-    private readonly float _damping;              // Sönümleme
+    private readonly float _damping;              // Sönümleme (b)
     private readonly float _maxLength;            // Max ip uzunluğu
-    private readonly float _minLength;            // Min ip uzunluğu (çarpmaması için)
+    private readonly float _minLength;            // Min ip uzunluğu
     private readonly float _pullSpeed;            // Çekilme hızı
     private readonly float _launchBoost;          // Fırlatma boost çarpanı
     
     // Durum
-    private Vector3 _anchorPoint;                  // İp bağlama noktası
+    private Vector3 _anchorPoint;                  
     private float _currentLength;
     private bool _isGrappling;
-    private bool _isRetracting;                  // İp çekiliyor mu
-    private bool _launchPending;                   // Fırlatma bekleniyor mu
-    private float _launchWindow;                   // Fırlatma pencere süresi
+    private bool _isRetracting;                  
+    private bool _launchPending;                   
+    private float _launchWindow;                   
     
     public GrappleModifier(
         float springStrength = 150f,
@@ -41,11 +42,9 @@ public sealed class GrappleModifier : IMovementModifier
         _isGrappling = false;
     }
     
-    public bool IsExpired => false;  // Manuel kontrol
+    public bool IsExpired => false;
     public bool IsGrappling => _isGrappling;
     public bool CanLaunch => _launchPending && _launchWindow > 0f;
-    public float CurrentLength => _currentLength;
-    public float MaxLength => _maxLength;
     
     public string DebugLabel => _isGrappling 
         ? $"Grapple({_currentLength:F1}m, launch={_launchPending})" 
@@ -63,24 +62,17 @@ public sealed class GrappleModifier : IMovementModifier
     
     public void ReleaseGrapple()
     {
-        if (_isGrappling && _currentLength < _maxLength * 0.8f)
+        if (_isGrappling)
         {
-            // Erken release = fırlatma penceresi aç
             _launchPending = true;
-            _launchWindow = 0.3f;  // 300ms fırlatma penceresi
+            _launchWindow = 0.3f;
         }
         _isGrappling = false;
         _isRetracting = false;
     }
     
-    public void SetRetracting(bool retracting)
-    {
-        _isRetracting = retracting;
-    }
-    
     public Vector3 ModifyVelocity(Vector3 velocity, MovementContext ctx)
     {
-        // Fırlatma penceresi kontrolü
         if (_launchPending)
         {
             _launchWindow -= ctx.DeltaTime;
@@ -89,60 +81,51 @@ public sealed class GrappleModifier : IMovementModifier
         
         if (!_isGrappling) return velocity;
         
-        // Oyuncu pozisyonunu velocity'den tahmin et (gerçek pozisyon Godot'da)
-        // Burada velocity'ye ip fizikçisi uyguluyoruz
-        
-        var toAnchor = _anchorPoint - ctx.CurrentPosition;  // Anchor'a doğru vektör
+        var toAnchor = _anchorPoint - ctx.CurrentPosition;
         var distance = toAnchor.Length();
         _currentLength = distance;
         
-        // Max uzunluk kontrolü
-        if (distance > _maxLength)
+        if (distance > _maxLength * 1.2f) // %20 tolerans
         {
             _isGrappling = false;
             return velocity;
         }
+
+        var direction = Vector3.Normalize(toAnchor);
         
-        // İp çekilme
-        if (_isRetracting && distance > _minLength)
-        {
-            distance = Mathf.Max(distance - _pullSpeed * ctx.DeltaTime, _minLength);
-            _currentLength = distance;
-        }
+        // ── KRİTİK GÜNCELLEME: Spring-Damper Modeli ──────────────────────────
+        // F = -k * x - b * v
+        // Burada x = (mevcut_uzunluk - hedef_uzunluk)
+        // Hedef yönelimini korumak için damping kuvvetini sadece hıza değil, 
+        // hızın ip yönündeki bileşenine (radial velocity) uygulamalıyız.
         
-        // Yaylanma kuvveti (Hooke's Law: F = -k * x)
-        var stretch = distance - (_minLength + (_maxLength - _minLength) * 0.3f);  // Optimal uzunluk
-        var springForce = Vector3.Normalize(toAnchor) * (_springStrength * stretch * ctx.DeltaTime);
+        float currentSpringLength = _isRetracting ? _minLength : (_maxLength * 0.5f);
+        float stretch = distance - currentSpringLength;
         
-        // Sönümleme (damping)
-        var dampForce = velocity * (_damping * ctx.DeltaTime);
+        // Yay kuvveti (her zaman merkeze çeker)
+        Vector3 springForce = direction * (_springStrength * stretch);
         
-        // Fırlatma penceresi aç (swing apex detection)
-        if (velocity.Y > 0f && Mathf.Abs(velocity.Y) < 2f)
-        {
-            _launchPending = true;
-            _launchWindow = 0.2f;
-        }
+        // Sönümleme (Damping)
+        // Hızın ip yönündeki izdüşümünü bul (radial velocity)
+        float radialVelocity = Vector3.Dot(velocity, direction);
+        Vector3 dampForce = direction * (_damping * radialVelocity);
         
-        return velocity + springForce - dampForce;
+        // Toplam grapple ivmesi
+        Vector3 grappleAccel = springForce - dampForce;
+        
+        // Swing (salınım) mekaniği için teğetsel hızı koru, radyal hızı yayla yönet
+        return velocity + grappleAccel * ctx.DeltaTime;
     }
     
-    /// <summary>
-    /// Fırlatma momentumu - release timing kritik
-    /// </summary>
     public Vector3 GetLaunchVelocity(Vector3 currentVelocity)
     {
         if (!CanLaunch) return currentVelocity;
-        
         _launchPending = false;
         return currentVelocity * _launchBoost;
     }
 }
 
-// Mathf helper
 file static class Mathf
 {
-    public static float Max(float a, float b) => a > b ? a : b;
-    public static float Abs(float a) => a < 0 ? -a : a;
     public static float Distance(Vector3 a, Vector3 b) => (a - b).Length();
 }
