@@ -86,6 +86,10 @@ func is_aiming() -> bool:
 		return (_active_mode as OrbitCameraMode).is_aiming()
 	return false
 
+func set_character_speed(speed: float) -> void:
+	if _active_mode:
+		_active_mode.set_character_speed(speed)
+
 func set_sensitivity(value: float) -> void:
 	if _active_mode is OrbitCameraMode:
 		(_active_mode as OrbitCameraMode).set_sensitivity(value)

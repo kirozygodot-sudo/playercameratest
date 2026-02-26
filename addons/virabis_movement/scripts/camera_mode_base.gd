@@ -35,5 +35,7 @@ func get_right(rig: Node3D) -> Vector3:
 	return rig.global_basis.x
 
 ## Debug overlay string'i.
+func set_character_speed(speed: float) -> void: pass
+
 func get_debug_label() -> String:
 	return mode_name

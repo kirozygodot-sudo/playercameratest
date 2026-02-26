@@ -26,8 +26,14 @@ var zoom_smooth       : float   = 8.0
 
 # ── Sprint FOV Kick ───────────────────────────────────────────────────────────
 var fov_sprint        : float   = 85.0   # Sprint'te geniş FOV
+var fov_min_speed     : float   = 5.0    # Bu hızın altında FOV değişmez
+var fov_max_speed     : float   = 20.0   # Bu hızın üstünde max FOV
+var fov_min_value     : float   = 75.0   # Min hızda FOV değeri
+var fov_max_value     : float   = 90.0   # Max hızda FOV değeri
+var fov_speed_smooth  : float   = 4.0    # Hıza bağlı FOV geçiş hızı
 var sprint_fov_smooth : float   = 6.0    # FOV geçiş hızı
 var _is_sprinting     : bool    = false
+var _current_character_speed : float = 0.0
 
 var offset_normal     : Vector3 = Vector3(0.6, 1.6, 0.0)  # Over-the-shoulder
 var offset_aiming     : Vector3 = Vector3(0.2, 1.5, 0.0)  # Nişan → merkeze
@@ -48,6 +54,11 @@ var _target_offset    : Vector3
 # ── Camera Shake ─────────────────────────────────────────────────────────────
 var _shake_amount     : float   = 0.0
 var _shake_decay      : float   = 5.0
+var _shake_frequency  : float   = 25.0 # Hz
+var _shake_amplitude  : float   = 0.1  # Max offset
+var _shake_duration   : float   = 0.2  # Saniye
+var _shake_timer      : float   = 0.0
+var _noise            : FastNoiseLite = FastNoiseLite.new()
 
 # ── Node refs (enter'da çözülür) ──────────────────────────────────────────────
 var _yaw_pivot   : Node3D      = null
@@ -59,6 +70,9 @@ var _camera      : Camera3D    = null
 
 func _init() -> void:
 	mode_name = "Orbit"
+	_noise.seed = randi()
+	_noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	_noise.frequency = _shake_frequency
 
 
 func enter(rig: Node3D) -> void:
@@ -117,10 +131,16 @@ func process(_rig: Node3D, delta: float) -> void:
 	_spring_arm.position = lerp(_spring_arm.position, _target_offset, t_aim)
 
 	# Sprint FOV Kick uygula
-	var target_fov_with_sprint := fov_sprint if _is_sprinting else _target_fov
-	if not _is_aiming:  # Nişan alırken FOV kick olmasın
-		var t_sprint := sprint_fov_smooth * delta
-		_camera.fov = lerp(_camera.fov, target_fov_with_sprint, t_sprint)
+	var target_fov_by_speed := fov_normal
+	if not _is_aiming:
+		var speed_ratio := clampf((_current_character_speed - fov_min_speed) / (fov_max_speed - fov_min_speed), 0.0, 1.0)
+		target_fov_by_speed = lerpf(fov_min_value, fov_max_value, speed_ratio)
+
+	var final_target_fov := target_fov_by_speed
+	if _is_sprinting:
+		final_target_fov = fov_sprint
+
+	_camera.fov = lerp(_camera.fov, final_target_fov, fov_speed_smooth * delta)
 
 	# Camera Shake uygula
 	if _shake_amount > 0.0:
@@ -163,6 +183,9 @@ func add_shake(amount: float) -> void:
 
 
 ## Sprint durumunu ayarla (FOV kick için)
+func set_character_speed(speed: float) -> void:
+	_current_character_speed = speed
+
 func set_sprinting(value: bool) -> void:
 	_is_sprinting = value
 
