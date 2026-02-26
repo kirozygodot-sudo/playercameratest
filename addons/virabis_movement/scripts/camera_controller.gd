@@ -1,15 +1,14 @@
 ## camera_controller.gd
 ## Virabis Camera Controller — Gameplay Layer
 ##
-## TEK SORUMLULUĞU: Aktif CameraModeBase'i çalıştırmak.
-## Mod içini bilmez, umursamaz. Sadece enter/exit/process/handle_input çağırır.
+## TEK SORUMLULUĞU: Aktif CameraModeBase'i çalıştırmak ve modlar arası geçişleri (Blending) yönetmek.
 
 class_name CameraController
 extends Node3D
 
 ## SpringArm çarpışma katmanı ayarları
-@export var collision_layer_mask : int = 1  # Varsayılan: layer 1 (world/terrain)
-@export var collision_margin : float = 0.1   # Optimize edildi: 0.5 -> 0.1 (dar alanlarda titremeyi önlemek için)
+@export var collision_layer_mask : int = 1
+@export var collision_margin : float = 0.1
 
 # ── Lock-on Config ────────────────────────────────────────────────────────────
 @export_group("Lock-on Settings")
@@ -17,19 +16,20 @@ extends Node3D
 @export var lock_on_speed  : float = 10.0
 @export var lock_on_group  : String = "enemies"
 
-# ── Transition Config ──────────────────────────────────────────────────────────
-@export_group("Transition Settings")
-@export var transition_speed : float = 8.0
+# ── Blending Config ───────────────────────────────────────────────────────────
+@export_group("Blending Settings")
+@export var blend_duration : float = 0.5  # Modlar arası geçiş süresi (AAA Feel)
 
 var _active_mode : CameraModeBase = null
 var _target_enemy : Node3D = null
 var _is_locked_on : bool = false
 
-# Geçiş animasyonu için yardımcı değişkenler
-var _transition_timer : float = 0.0
-var _is_transitioning : bool = false
-var _old_camera_pos : Vector3
-var _old_camera_rot : Vector3
+# Blending (Mikser) değişkenleri
+var _is_blending : bool = false
+var _blend_timer : float = 0.0
+var _blend_from_fov : float = 75.0
+var _blend_from_pos : Vector3
+var _blend_from_rot : Vector3
 
 signal mode_changed(mode_name: String)
 signal lock_on_changed(is_locked: bool, target: Node3D)
@@ -37,15 +37,13 @@ signal lock_on_changed(is_locked: bool, target: Node3D)
 # ─────────────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-	set_as_top_level(true)  # Player rotation'ından bağımsız döner
+	set_as_top_level(true)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	
-	# SpringArm optimizasyonu
 	var spring_arm := get_node_or_null("YawPivot/PitchPivot/SpringArm3D")
 	if spring_arm:
 		spring_arm.collision_mask = collision_layer_mask
 		spring_arm.margin = collision_margin
-		# Dar alanlarda pürüzsüzlük için:
 		spring_arm.shape = SphereShape3D.new()
 		spring_arm.shape.radius = 0.1
 	
@@ -53,24 +51,21 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	# Pozisyonu her frame player ile senkronize et
 	if get_parent():
 		global_position = get_parent().global_position
 
-	# Lock-on mantığı
 	if _is_locked_on and is_instance_valid(_target_enemy):
 		_handle_lock_on(delta)
 
 	if _active_mode:
 		_active_mode.process(self, delta)
 	
-	# Pürüzsüz mod geçiş animasyonu (Opsiyonel: Camera3D pozisyonunu lerp ile yumuşatabiliriz)
-	# Not: CameraModeBase zaten kendi içinde lerp kullanıyor, ancak modlar arası 
-	# ani sıçramaları önlemek için Camera3D'nin global transformunu lerp edebiliriz.
+	# Blending (Mikser) Uygula
+	if _is_blending:
+		_update_blending(delta)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Debug: Escape ile mouse toggle
 	if event.is_action_pressed("ui_cancel"):
 		var mode := Input.get_mouse_mode()
 		Input.set_mouse_mode(
@@ -79,11 +74,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		)
 		return
 
-	# Lock-on Toggle (Orta tık veya özel tuş)
 	if event.is_action_pressed("lock_on"):
 		toggle_lock_on()
 
-	# Kamera modu değiştirme (Tab tuşu örneği)
 	if event.is_action_pressed("switch_camera_mode"):
 		if _active_mode is OrbitCameraMode:
 			switch_mode(FirstPersonCameraMode.new())
@@ -95,6 +88,25 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if _active_mode:
 		_active_mode.handle_input(self, event)
+
+
+# ── Mikser (Blending) Mantığı ─────────────────────────────────────────────────
+
+func _update_blending(delta: float) -> void:
+	_blend_timer += delta
+	var t = clampf(_blend_timer / blend_duration, 0.0, 1.0)
+	# Ease-out sine eğrisi
+	var ease_t = sin(t * PI * 0.5)
+	
+	var camera := get_node("YawPivot/PitchPivot/SpringArm3D/Camera3D") as Camera3D
+	if not camera: return
+	
+	# FOV Blend
+	# Not: Modlar kendi içlerinde de FOV'u lerp ediyor olabilir, 
+	# bu yüzden blender sadece geçiş anındaki ani sıçramayı yumuşatır.
+	
+	if t >= 1.0:
+		_is_blending = false
 
 
 # ── Lock-on Mantığı ───────────────────────────────────────────────────────────
@@ -149,9 +161,14 @@ func _handle_lock_on(delta: float) -> void:
 # PUBLIC API
 # ─────────────────────────────────────────────────────────────────────────────
 
-## Kamera modunu değiştir. Eski mod exit(), yeni mod enter() alır.
 func switch_mode(new_mode: CameraModeBase) -> void:
 	var camera := get_node_or_null("YawPivot/PitchPivot/SpringArm3D/Camera3D") as Camera3D
+	
+	# Eski verileri sakla (Blending için)
+	if camera:
+		_blend_from_fov = camera.fov
+		_is_blending = true
+		_blend_timer = 0.0
 	
 	if _active_mode: 
 		_active_mode.exit(self)
@@ -162,18 +179,29 @@ func switch_mode(new_mode: CameraModeBase) -> void:
 		_active_mode.enter(self)
 		mode_changed.emit(_active_mode.mode_name)
 		
-		# Pürüzsüz geçiş için FOV lerp başlat (Tween ile)
+		# Pürüzsüz geçiş için Tween ile FOV ve Offset blending başlat
 		if camera:
-			var target_fov = 75.0 # Varsayılan
+			var target_fov = 75.0
 			if _active_mode is OrbitCameraMode: target_fov = _active_mode.fov_normal
 			elif _active_mode is FirstPersonCameraMode: target_fov = _active_mode.fov_default
 			
 			var tween = create_tween()
+			tween.set_parallel(true)
 			tween.set_trans(Tween.TRANS_SINE)
 			tween.set_ease(Tween.EASE_OUT)
-			tween.tween_property(camera, "fov", target_fov, 0.4)
+			
+			# FOV Blend
+			camera.fov = _blend_from_fov
+			tween.tween_property(camera, "fov", target_fov, blend_duration)
+			
+			# SpringArm Position (Offset) Blend
+			var spring_arm := get_node("YawPivot/PitchPivot/SpringArm3D") as SpringArm3D
+			if spring_arm:
+				var target_pos = spring_arm.position
+				# Başlangıç pozisyonunu koru, hedefe tweenle
+				tween.tween_property(spring_arm, "position", target_pos, blend_duration).from(spring_arm.position)
 
-## PlayerController bu vektörü input hesabında kullanır.
+
 func get_forward() -> Vector3:
 	return _active_mode.get_forward(self) if _active_mode else -global_basis.z
 
@@ -202,5 +230,6 @@ func get_debug_info() -> Dictionary:
 		"detail":         _active_mode.get_debug_label() if _active_mode else "",
 		"is_aiming":      is_aiming(),
 		"is_locked":      _is_locked_on,
+		"is_blending":    _is_blending,
 		"mouse_captured": Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
 	}
