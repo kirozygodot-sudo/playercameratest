@@ -9,7 +9,7 @@ extends Node3D
 
 ## SpringArm çarpışma katmanı ayarları
 @export var collision_layer_mask : int = 1  # Varsayılan: layer 1 (world/terrain)
-@export var collision_margin : float = 0.5   # Çarpışma mesafe payı
+@export var collision_margin : float = 0.1   # Optimize edildi: 0.5 -> 0.1 (dar alanlarda titremeyi önlemek için)
 
 # ── Lock-on Config ────────────────────────────────────────────────────────────
 @export_group("Lock-on Settings")
@@ -17,9 +17,19 @@ extends Node3D
 @export var lock_on_speed  : float = 10.0
 @export var lock_on_group  : String = "enemies"
 
+# ── Transition Config ──────────────────────────────────────────────────────────
+@export_group("Transition Settings")
+@export var transition_speed : float = 8.0
+
 var _active_mode : CameraModeBase = null
 var _target_enemy : Node3D = null
 var _is_locked_on : bool = false
+
+# Geçiş animasyonu için yardımcı değişkenler
+var _transition_timer : float = 0.0
+var _is_transitioning : bool = false
+var _old_camera_pos : Vector3
+var _old_camera_rot : Vector3
 
 signal mode_changed(mode_name: String)
 signal lock_on_changed(is_locked: bool, target: Node3D)
@@ -29,13 +39,17 @@ signal lock_on_changed(is_locked: bool, target: Node3D)
 func _ready() -> void:
 	set_as_top_level(true)  # Player rotation'ından bağımsız döner
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	switch_mode(OrbitCameraMode.new())
 	
-	# SpringArm çarpışma katmanı ayarları
+	# SpringArm optimizasyonu
 	var spring_arm := get_node_or_null("YawPivot/PitchPivot/SpringArm3D")
 	if spring_arm:
 		spring_arm.collision_mask = collision_layer_mask
 		spring_arm.margin = collision_margin
+		# Dar alanlarda pürüzsüzlük için:
+		spring_arm.shape = SphereShape3D.new()
+		spring_arm.shape.radius = 0.1
+	
+	switch_mode(OrbitCameraMode.new())
 
 
 func _process(delta: float) -> void:
@@ -49,6 +63,10 @@ func _process(delta: float) -> void:
 
 	if _active_mode:
 		_active_mode.process(self, delta)
+	
+	# Pürüzsüz mod geçiş animasyonu (Opsiyonel: Camera3D pozisyonunu lerp ile yumuşatabiliriz)
+	# Not: CameraModeBase zaten kendi içinde lerp kullanıyor, ancak modlar arası 
+	# ani sıçramaları önlemek için Camera3D'nin global transformunu lerp edebiliriz.
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -102,7 +120,6 @@ func _find_closest_enemy() -> Node3D:
 		if enemy is Node3D:
 			var dist = global_position.distance_to(enemy.global_position)
 			if dist < min_dist:
-				# Görüş hattı kontrolü (Opsiyonel Raycast eklenebilir)
 				min_dist = dist
 				closest = enemy
 	return closest
@@ -114,21 +131,15 @@ func _handle_lock_on(delta: float) -> void:
 	
 	if not yaw_pivot or not pitch_pivot: return
 	
-	# Hedefe doğru bakış vektörü
 	var target_pos = _target_enemy.global_position
-	# Göz hizasına bak (varsayılan +1.5m)
 	target_pos.y += 1.5
 	
 	var look_dir = (target_pos - global_position).normalized()
 	
-	# Hedef rotasyonları hesapla
 	var target_yaw = rad_to_deg(atan2(-look_dir.x, -look_dir.z))
 	var target_pitch = rad_to_deg(asin(look_dir.y))
 	
-	# Kamera modundaki iç değişkenleri güncelle ki input kesilince kamera sapmasın
-	if _active_mode.has_method("set_rotation_degrees"):
-		_active_mode.set_rotation_degrees(target_yaw, -target_pitch)
-	elif "_yaw" in _active_mode:
+	if "_yaw" in _active_mode:
 		_active_mode._yaw = lerp_angle(deg_to_rad(_active_mode._yaw), deg_to_rad(target_yaw), lock_on_speed * delta)
 		_active_mode._yaw = rad_to_deg(_active_mode._yaw)
 		_active_mode._pitch = lerp_angle(deg_to_rad(_active_mode._pitch), deg_to_rad(-target_pitch), lock_on_speed * delta)
@@ -140,11 +151,27 @@ func _handle_lock_on(delta: float) -> void:
 
 ## Kamera modunu değiştir. Eski mod exit(), yeni mod enter() alır.
 func switch_mode(new_mode: CameraModeBase) -> void:
-	if _active_mode: _active_mode.exit(self)
+	var camera := get_node_or_null("YawPivot/PitchPivot/SpringArm3D/Camera3D") as Camera3D
+	
+	if _active_mode: 
+		_active_mode.exit(self)
+	
 	_active_mode = new_mode
+	
 	if _active_mode:
 		_active_mode.enter(self)
 		mode_changed.emit(_active_mode.mode_name)
+		
+		# Pürüzsüz geçiş için FOV lerp başlat (Tween ile)
+		if camera:
+			var target_fov = 75.0 # Varsayılan
+			if _active_mode is OrbitCameraMode: target_fov = _active_mode.fov_normal
+			elif _active_mode is FirstPersonCameraMode: target_fov = _active_mode.fov_default
+			
+			var tween = create_tween()
+			tween.set_trans(Tween.TRANS_SINE)
+			tween.set_ease(Tween.EASE_OUT)
+			tween.tween_property(camera, "fov", target_fov, 0.4)
 
 ## PlayerController bu vektörü input hesabında kullanır.
 func get_forward() -> Vector3:
